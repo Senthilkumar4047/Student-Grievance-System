@@ -59,6 +59,8 @@
                             Admin
                         {% elif session.get('role') == 'principal' %}
                             Principal
+                        {% elif session.get('role') == 'staff' %}
+                            Department Staff
                         {% elif session.get('role') == 'department' %}
                             Complaint Authority
                         {% elif session.get('role') == 'warden' %}
@@ -105,8 +107,24 @@
                             <span>Monitor Grievances</span>
                         </a>
                     </li>
-                {% elif session.get('role') in ['department', 'warden'] %}
-                    <!-- Authority/Warden Navigation -->
+                {% elif session.get('role') == 'staff' %}
+                    <!-- Staff Navigation -->
+                    <li class="sidebar-item {% if request.path == url_for('staff_dashboard') %}active{% endif %}">
+                        <a href="{{ url_for('staff_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-briefcase"></i>
+                            <span>My Grievances</span>
+                        </a>
+                    </li>
+                {% elif session.get('role') == 'warden' %}
+                    <!-- Warden Navigation -->
+                    <li class="sidebar-item {% if request.path == url_for('warden_dashboard') %}active{% endif %}">
+                        <a href="{{ url_for('warden_dashboard') }}" class="sidebar-link">
+                            <i class="fa-solid fa-building"></i>
+                            <span>My Grievances</span>
+                        </a>
+                    </li>
+                {% elif session.get('role') == 'department' %}
+                    <!-- Authority Navigation -->
                     <li class="sidebar-item {% if request.path == url_for('dashboard') %}active{% endif %}">
                         <a href="{{ url_for('dashboard') }}" class="sidebar-link">
                             <i class="fa-solid fa-house"></i>

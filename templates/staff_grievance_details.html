@@ -1,23 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Grievance #{{ grievance.id }} - Student Grievance Portal{% endblock %}
-
-{% block header_title %}Grievance Details{% endblock %}
+{% block title %}Grievance Details{% endblock %}
 
 {% block content %}
+<!-- Page Header -->
 <div class="page-header">
     <div class="page-title-group">
         <h1 class="page-title">Grievance #{{ grievance.id }}</h1>
         <p class="page-subtitle">Track conversation updates and manage this complaint case.</p>
     </div>
     <div style="display: flex; gap: 12px;">
-        <a href="{{ url_for('export_pdf', id=grievance.id) }}" class="btn btn-secondary">
-            <i class="fa-solid fa-file-pdf" style="color: var(--danger);"></i> Download PDF Summary
-        </a>
-        {% if session.get('role') == 'admin' %}
-            <a href="{{ url_for('admin_grievances') }}" class="btn btn-secondary">Back to Log</a>
+        {% if session.get('role') == 'warden' and grievance.category == 'Hostel' %}
+            <a href="{{ url_for('export_pdf', id=grievance.id) }}" class="btn btn-secondary">
+                <i class="fa-solid fa-file-pdf" style="color: var(--danger);"></i> Download PDF Summary
+            </a>
+        {% endif %}
+        
+        {% if session.get('role') == 'warden' %}
+            <a href="{{ url_for('warden_dashboard') }}" class="btn btn-secondary">
+                <i class="fa-solid fa-arrow-left"></i> Back to List
+            </a>
         {% else %}
-            <a href="{{ url_for('my_grievances') }}" class="btn btn-secondary">Back to List</a>
+            <a href="{{ url_for('staff_dashboard') }}" class="btn btn-secondary">
+                <i class="fa-solid fa-arrow-left"></i> Back to List
+            </a>
         {% endif %}
     </div>
 </div>
@@ -34,24 +40,22 @@
                 
                 {% if grievance.status == 'pending' %}
                     <span class="pill pill-pending" style="font-size: 13px; padding: 6px 12px;">Pending</span>
+                {% elif grievance.status == 'staff_review' %}
+                    <span class="pill pill-warning" style="font-size: 11px; padding: 6px 12px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">
+                        In Review
+                    </span>
                 {% elif grievance.status == 'in-progress' or grievance.status == 'in_progress' %}
-                    {% if session.get('role') != 'student' %}
-                        {% if grievance.warden_resolved %}
-                            <span class="pill pill-warning" style="font-size: 11px; padding: 6px 12px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">
-                                <i class="fa-solid fa-hourglass-half"></i> Warden Resolved (Pending Review)
-                            </span>
-                        {% elif grievance.staff_approved %}
-                            <span class="pill pill-warning" style="font-size: 11px; padding: 6px 12px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">
-                                <i class="fa-solid fa-hourglass-half"></i> Staff Resolved (Pending Review)
-                            </span>
-                        {% else %}
-                            <span class="pill pill-in-progress" style="font-size: 13px; padding: 6px 12px;">In Progress</span>
-                        {% endif %}
+                    {% if grievance.warden_resolved %}
+                        <span class="pill pill-warning" style="font-size: 13px; padding: 6px 12px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">Warden Resolved</span>
+                    {% elif grievance.staff_approved %}
+                        <span class="pill pill-warning" style="font-size: 13px; padding: 6px 12px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">Staff Resolved</span>
                     {% else %}
                         <span class="pill pill-in-progress" style="font-size: 13px; padding: 6px 12px;">In Progress</span>
                     {% endif %}
-                {% else %}
+                {% elif grievance.status == 'resolved' %}
                     <span class="pill pill-resolved" style="font-size: 13px; padding: 6px 12px;">Resolved</span>
+                {% else %}
+                    <span class="pill" style="font-size: 13px; padding: 6px 12px;">{{ grievance.status }}</span>
                 {% endif %}
             </div>
             
@@ -62,26 +66,15 @@
                 </div>
                 <div class="meta-info-item">
                     <span>Priority:</span>
-                    {% if session.get('role') == 'department' %}
-                        <!-- Complaint Authority can adjust priority -->
-                        <form action="{{ url_for('update_priority', id=grievance.id) }}" method="post" style="display: flex; gap: 6px; align-items: center;">
-                            <select name="priority" class="form-control" style="padding: 4px 8px; font-size: 12px; width: 90px;" onchange="this.form.submit()">
-                                <option value="low" {% if grievance.priority == 'low' %}selected{% endif %}>Low</option>
-                                <option value="medium" {% if grievance.priority == 'medium' %}selected{% endif %}>Medium</option>
-                                <option value="high" {% if grievance.priority == 'high' %}selected{% endif %}>High</option>
-                            </select>
-                        </form>
-                    {% else %}
-                        <span>
-                            {% if grievance.priority == 'low' %}
-                                <span class="pill pill-low">{{ grievance.priority }}</span>
-                            {% elif grievance.priority == 'medium' %}
-                                <span class="pill pill-medium">{{ grievance.priority }}</span>
-                            {% else %}
-                                <span class="pill pill-high">{{ grievance.priority }}</span>
-                            {% endif %}
-                        </span>
-                    {% endif %}
+                    <span>
+                        {% if grievance.priority == 'low' %}
+                            <span class="pill pill-low">{{ grievance.priority }}</span>
+                        {% elif grievance.priority == 'medium' %}
+                            <span class="pill pill-medium">{{ grievance.priority }}</span>
+                        {% else %}
+                            <span class="pill pill-high">{{ grievance.priority }}</span>
+                        {% endif %}
+                    </span>
                 </div>
                 <div class="meta-info-item">
                     <span>Filed By:</span>
@@ -103,16 +96,16 @@
                 <div class="meta-info-item">
                     <span>Assigned To:</span>
                     <span>
-                        {% if grievance.staff_name %}
-                            <strong style="color: var(--primary);">{{ grievance.staff_name }}</strong> <span style="font-size: 11px; color: var(--text-hint);">({{ grievance.staff_dept }})</span>
+                        {% if session.get('role') == 'warden' %}
+                            <strong style="color: var(--primary);">Hostel Warden</strong>
                         {% else %}
-                            <span style="color: var(--text-hint); font-style: italic;">Unassigned</span>
+                            <strong style="color: var(--primary);">Department Staff</strong>
                         {% endif %}
                     </span>
                 </div>
                 <div class="meta-info-item">
                     <span>Submitted On:</span>
-                    <span>{{ grievance.created_at | datetimeformat }}</span>
+                    <span>{{ grievance.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                 </div>
             </div>
         </div>
@@ -140,47 +133,26 @@
             </div>
             {% endif %}
         </div>
+
         <!-- Remarks Display Card -->
-        {% if grievance.remarks and (session.get('role') != 'student' or grievance.category != 'Hostel' or grievance.status == 'resolved') %}
+        {% if grievance.remarks %}
         <div class="card" style="border-left: 4px solid var(--success); display: flex; flex-direction: column; gap: 8px;">
             <h4 style="font-size: 14px; font-weight: 700; color: var(--success);"><i class="fa-solid fa-comment-dots"></i> Official Remarks:</h4>
             <p style="font-size: 13.5px; color: var(--text-primary); white-space: pre-line; line-height: 1.5;">{{ grievance.remarks }}</p>
         </div>
         {% endif %}
         
-        <!-- Grievance Assignment & Special Warning panel (Complaint Authority only) -->
-        {% if session.get('role') == 'department' %}
-            {% if grievance.targets_staff %}
-                <div class="card" style="border-left: 4px solid var(--primary); background-color: rgba(128, 0, 0, 0.05); display: flex; flex-direction: column; gap: 8px;">
-                    <h4 style="font-size: 14.5px; font-weight: 700; color: var(--primary);"><i class="fa-solid fa-shield-halved"></i> Direct Staff Grievance</h4>
-                    <p style="font-size: 13px; color: var(--text-primary); line-height: 1.55; margin: 0;">
-                        This complaint directly targets a staff member or warden. In accordance with university policy, it cannot be assigned to staff. The **Complaint Authority** is resolving this case directly in consultation with the **Principal**.
-                    </p>
-                </div>
-            {% endif %}
-        {% endif %}
-
-        <!-- Unified Actions panel (Complaint Authority & Warden) -->
-        {% set show_action_panel = false %}
-        {% if session.get('role') == 'department' %}
-            {% set show_action_panel = true %}
-        {% elif session.get('role') == 'warden' and grievance.category == 'Hostel' %}
-            {% if not grievance.targets_staff %}
-                {% set show_action_panel = true %}
-            {% endif %}
-        {% endif %}
-
-        {% if show_action_panel %}
+        <!-- Status Action Update panel -->
+        {% if grievance.status == 'pending' or grievance.status == 'staff_review' %}
         <div class="card" style="display: flex; flex-direction: column; gap: 12px; border-left: 4px solid var(--primary);">
             <h3 style="font-size: 16px;"><i class="fa-solid fa-circle-info"></i> Update Status & Remarks</h3>
             
-            <form action="{{ url_for('update_status', id=grievance.id) }}" method="post" style="display: flex; flex-direction: column; gap: 12px;">
+            <form method="post" style="display: flex; flex-direction: column; gap: 12px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label for="actionStatus" class="form-label">Grievance Status:</label>
-                    <select name="status" id="actionStatus" class="form-control" required style="margin-bottom: 12px;">
-                        <option value="pending" {% if grievance.status == 'pending' %}selected{% endif %}>Pending review</option>
-                        <option value="in-progress" {% if grievance.status == 'in-progress' %}selected{% endif %}>In progress</option>
-                        <option value="resolved" {% if grievance.status == 'resolved' %}selected{% endif %}>Mark as Resolved</option>
+                    <select name="action" id="actionStatus" class="form-control" required style="margin-bottom: 12px;">
+                        <option value="need_info" {% if grievance.status == 'staff_review' %}selected{% endif %}>Pending review</option>
+                        <option value="resolve">Ready to Resolve</option>
                     </select>
                 </div>
                 
@@ -194,17 +166,18 @@
                 </button>
             </form>
         </div>
-        {% endif %}
-
-        <!-- Administrative Controls (Admin only) -->
-        {% if session.get('role') == 'admin' %}
-        <div class="card" style="display: flex; flex-direction: column; gap: 12px; border-left: 4px solid var(--danger);">
-            <h3 style="font-size: 16px; color: var(--danger);">Administrative Actions</h3>
-            <form action="{{ url_for('delete_grievance', id=grievance.id) }}" method="post" onsubmit="return confirm('WARNING: Are you sure you want to permanently delete this grievance? This action cannot be undone.')">
-                <button type="submit" class="btn btn-danger" style="width: 100%;">
-                    <i class="fa-solid fa-trash-can"></i> Delete Grievance Record
-                </button>
-            </form>
+        {% else %}
+        <div class="card" style="border-left: 4px solid var(--success); display: flex; flex-direction: column; gap: 8px;">
+            <h4 style="font-size: 14.5px; font-weight: 700; color: var(--success);"><i class="fa-solid fa-check-circle"></i> Already Resolved</h4>
+            <p style="font-size: 13px; color: var(--text-primary); line-height: 1.55; margin: 0;">
+                This grievance has been marked as resolved and is awaiting authority approval.
+            </p>
+            {% if grievance.remarks %}
+            <div style="margin-top: 8px; border-top: 1px solid var(--border-color); padding-top: 8px;">
+                <p style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px;">Resolution Notes:</p>
+                <p style="font-size: 13px; line-height: 1.4;">{{ grievance.remarks }}</p>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
         
@@ -228,7 +201,7 @@
             <div class="message-bubble other">
                 <div class="message-info">
                     <span style="font-weight: 600;">{{ grievance.student_name }}</span>
-                    <span>{{ grievance.created_at | datetimeformat }}</span>
+                    <span>{{ grievance.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                 </div>
                 <div class="message-body" style="font-style: italic; background-color: var(--bg-card); opacity: 0.95;">
                     [Original Complaint Submission]<br>
@@ -241,31 +214,26 @@
             {% if replies %}
                 {% for reply in replies %}
                     {% set is_self = (reply.sender_id == session['user_id']) %}
-                    {% set is_hidden = false %}
-                    {% if session.get('role') == 'student' and grievance.category == 'Hostel' and grievance.status != 'resolved' %}
-                        {% if reply.sender_role == 'warden' or '[STATUS UPDATE]' in reply.message %}
-                            {% set is_hidden = true %}
-                        {% endif %}
-                    {% endif %}
-                    
-                    {% if not is_hidden %}
                     <div class="message-bubble {% if is_self %}self{% else %}other{% endif %}">
                         <div class="message-info">
                             <span style="font-weight: 600;">{{ reply.sender_name }} ({{ reply.sender_role | upper }})</span>
-                            <span>{{ reply.created_at | datetimeformat('%H:%M | %b %d') }}</span>
+                            <span>{{ reply.created_at.strftime('%H:%M | %b %d') }}</span>
                         </div>
                         <div class="message-body">
                             {{ reply.message }}
                         </div>
                     </div>
-                    {% endif %}
                 {% endfor %}
             {% endif %}
         </div>
         
         <!-- Chat Input area -->
         <div class="chat-input-area">
-            <form action="{{ url_for('reply_grievance', id=grievance.id) }}" method="post" class="chat-input-form">
+            {% if session.get('role') == 'warden' %}
+                <form action="{{ url_for('warden_add_reply', grievance_id=grievance.id) }}" method="post" class="chat-input-form">
+            {% else %}
+                <form action="{{ url_for('staff_add_reply', grievance_id=grievance.id) }}" method="post" class="chat-input-form">
+            {% endif %}
                 <textarea name="message" placeholder="Type a reply here..." required aria-label="Reply message text area"></textarea>
                 <button type="submit" class="btn btn-primary" title="Send Reply">
                     <i class="fa-solid fa-paper-plane"></i>

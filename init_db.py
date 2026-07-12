@@ -29,7 +29,7 @@ def init_database():
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(100) NOT NULL UNIQUE,
                 password VARCHAR(255) NOT NULL,
-                role ENUM('student', 'department', 'warden', 'principal', 'admin') DEFAULT 'student',
+                role ENUM('student', 'staff', 'department', 'warden', 'principal', 'admin') DEFAULT 'student',
                 department VARCHAR(100) DEFAULT NULL,
                 profile_photo VARCHAR(255) DEFAULT 'default.png',
                 is_active BOOLEAN DEFAULT TRUE,
@@ -43,21 +43,29 @@ def init_database():
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 assigned_to INT DEFAULT NULL,
+                staff_id INT DEFAULT NULL,
+                warden_id INT DEFAULT NULL,
                 is_anonymous BOOLEAN DEFAULT FALSE,
                 targets_staff BOOLEAN DEFAULT FALSE,
+                targets_warden BOOLEAN DEFAULT FALSE,
+                targets_authority BOOLEAN DEFAULT FALSE,
+                staff_approved BOOLEAN DEFAULT FALSE,
                 warden_resolved BOOLEAN DEFAULT FALSE,
+                authority_approved BOOLEAN DEFAULT FALSE,
                 title VARCHAR(150) NOT NULL,
                 category ENUM('Department', 'Hostel') NOT NULL,
                 target_department VARCHAR(100) DEFAULT NULL,
                 description TEXT NOT NULL,
                 attachment VARCHAR(255) DEFAULT NULL,
-                status ENUM('pending', 'in-progress', 'resolved') DEFAULT 'pending',
+                status ENUM('pending', 'staff_review', 'authority_review', 'in_progress', 'in-progress', 'resolved') DEFAULT 'pending',
                 priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
                 remarks TEXT DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
+                FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (warden_id) REFERENCES users(id) ON DELETE SET NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """)
         
@@ -97,13 +105,14 @@ def init_database():
         """)
         
         # Seed users
-        print("Seeding initial users for 5 roles...")
+        print("Seeding initial users for 6 roles...")
         
-        admin_pwd = generate_password_hash("Admin_Grievance_App_2026_Secure!")
-        student_pwd = generate_password_hash("Student_Grievance_App_2026_Secure!")
-        dept_pwd = generate_password_hash("Authority_Grievance_App_2026_Secure!")
-        warden_pwd = generate_password_hash("Warden_Grievance_App_2026_Secure!")
-        principal_pwd = generate_password_hash("Principal_Grievance_App_2026_Secure!")
+        admin_pwd = generate_password_hash("Admin@123")
+        student_pwd = generate_password_hash("Student@123")
+        staff_pwd = generate_password_hash("Staff@123")
+        dept_pwd = generate_password_hash("Authority@123")
+        warden_pwd = generate_password_hash("Warden@123")
+        principal_pwd = generate_password_hash("Principal@123")
         
         # 1. Admin
         cursor.execute(
@@ -115,17 +124,22 @@ def init_database():
             "INSERT INTO users (name, email, password, role, department, profile_photo) VALUES (%s, %s, %s, %s, %s, %s)",
             ("Jane Doe (Student)", "student@example.com", student_pwd, "student", "Computer Science", "student.png")
         )
-        # 3. Department Authority (Common)
+        # 3. Staff
+        cursor.execute(
+            "INSERT INTO users (name, email, password, role, department, profile_photo) VALUES (%s, %s, %s, %s, %s, %s)",
+            ("Department Staff", "staff@example.com", staff_pwd, "staff", "Computer Science", "staff.png")
+        )
+        # 4. Department Authority (Common)
         cursor.execute(
             "INSERT INTO users (name, email, password, role, department, profile_photo) VALUES (%s, %s, %s, %s, %s, %s)",
             ("Grievance Authority", "authority@example.com", dept_pwd, "department", None, "authority.png")
         )
-        # 4. Hostel Warden
+        # 5. Hostel Warden
         cursor.execute(
             "INSERT INTO users (name, email, password, role, department, profile_photo) VALUES (%s, %s, %s, %s, %s, %s)",
             ("Hostel Warden", "warden@example.com", warden_pwd, "warden", None, "warden.png")
         )
-        # 5. Principal
+        # 6. Principal
         cursor.execute(
             "INSERT INTO users (name, email, password, role, department, profile_photo) VALUES (%s, %s, %s, %s, %s, %s)",
             ("Principal", "principal@example.com", principal_pwd, "principal", None, "principal.png")
@@ -133,22 +147,30 @@ def init_database():
         
         conn.commit()
         print("Successfully seeded database with:")
-        print("  - Admin: admin@example.com / Admin_Grievance_App_2026_Secure!")
-        print("  - Student: student@example.com / Student_Grievance_App_2026_Secure!")
-        print("  - Authority: authority@example.com / Authority_Grievance_App_2026_Secure!")
-        print("  - Warden: warden@example.com / Warden_Grievance_App_2026_Secure!")
-        print("  - Principal: principal@example.com / Principal_Grievance_App_2026_Secure!")
+        print("  - Admin: admin@example.com / Admin@123")
+        print("  - Student: student@example.com / Student@123")
+        print("  - Staff: staff@example.com / Staff@123")
+        print("  - Authority: authority@example.com / Authority@123")
+        print("  - Warden: warden@example.com / Warden@123")
+        print("  - Principal: principal@example.com / Principal@123")
             
-        # Create default avatar
+        # Create default avatars for all roles
         uploads_dir = Config.UPLOAD_FOLDER
         os.makedirs(uploads_dir, exist_ok=True)
-        default_avatar_path = os.path.join(uploads_dir, 'default.png')
-        if not os.path.exists(default_avatar_path):
-            print("Creating default profile avatar image...")
-            png_bytes = bytes.fromhex('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000100000500010d0a2db40000000049454e44ae426082')
-            with open(default_avatar_path, 'wb') as f:
-                f.write(png_bytes)
-            print("Default avatar created.")
+        
+        # Create profile pictures for all roles
+        roles_list = ['default.png', 'admin.png', 'student.png', 'staff.png', 'authority.png', 'warden.png', 'principal.png']
+        
+        print("Creating profile avatar images for all roles...")
+        png_bytes = bytes.fromhex('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000100000500010d0a2db40000000049454e44ae426082')
+        
+        for role_file in roles_list:
+            role_path = os.path.join(uploads_dir, role_file)
+            if not os.path.exists(role_path):
+                with open(role_path, 'wb') as f:
+                    f.write(png_bytes)
+        
+        print("Profile avatars created for all roles.")
 
         cursor.close()
         conn.close()

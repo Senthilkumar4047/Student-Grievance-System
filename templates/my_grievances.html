@@ -94,11 +94,11 @@
                 </td>
                 <td>
                     {% if g.status == 'pending' %}
-                        <span class="pill pill-pending">{{ g.status }}</span>
-                    {% elif g.status == 'in-progress' %}
-                        <span class="pill pill-in-progress">{{ g.status }}</span>
+                        <span class="pill pill-pending">Pending</span>
+                    {% elif g.status == 'in-progress' or g.status == 'in_progress' %}
+                        <span class="pill pill-in-progress">In Progress</span>
                     {% else %}
-                        <span class="pill pill-resolved">{{ g.status }}</span>
+                        <span class="pill pill-resolved">Resolved</span>
                     {% endif %}
                 </td>
                 <td>{{ g.created_at | datetimeformat }}</td>

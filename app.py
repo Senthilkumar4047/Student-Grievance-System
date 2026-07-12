@@ -163,6 +163,30 @@ def authority_or_admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def staff_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'warning')
+            return redirect(url_for('login'))
+        if session.get('role') != 'staff':
+            flash('Access denied. Staff members only.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def warden_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'warning')
+            return redirect(url_for('login'))
+        if session.get('role') != 'warden':
+            flash('Access denied. Warden only.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # ----------------- ROUTES -----------------
 
 # Landing Page / Index
@@ -425,6 +449,10 @@ def dashboard():
         return redirect(url_for('admin_dashboard'))
     elif role == 'principal':
         return redirect(url_for('principal_dashboard'))
+    elif role == 'staff':
+        return redirect(url_for('staff_dashboard'))
+    elif role == 'warden':
+        return redirect(url_for('warden_dashboard'))
         
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -523,6 +551,358 @@ def dashboard():
         activities=activities
     )
 
+# Staff Dashboard
+@app.route('/staff')
+@staff_required
+def staff_dashboard():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    staff_id = session['user_id']
+    
+    # Get staff member's department
+    cursor.execute("SELECT department FROM users WHERE id = %s", (staff_id,))
+    staff_user = cursor.fetchone()
+    staff_dept = staff_user['department'] if staff_user else None
+    
+    # Count grievances by status
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE staff_id = %s AND status = 'pending'
+    """, (staff_id,))
+    pending_count = cursor.fetchone()['count']
+    
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE staff_id = %s AND status = 'staff_review'
+    """, (staff_id,))
+    in_review_count = cursor.fetchone()['count']
+    
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE staff_id = %s AND status = 'in-progress'
+    """, (staff_id,))
+    resolved_count = cursor.fetchone()['count']
+    
+    # Get all grievances assigned to this staff member
+    cursor.execute("""
+        SELECT g.*, u.name as student_name, u.email as student_email 
+        FROM grievances g 
+        JOIN users u ON g.user_id = u.id 
+        WHERE g.staff_id = %s 
+        ORDER BY g.created_at DESC
+    """, (staff_id,))
+    grievances = cursor.fetchall()
+    for g in grievances:
+        if g.get('is_anonymous'):
+            g['student_name'] = 'Anonymous Student'
+            g['student_email'] = 'N/A'
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template(
+        'staff_dashboard.html',
+        grievances=grievances,
+        pending_count=pending_count,
+        in_review_count=in_review_count,
+        resolved_count=resolved_count
+    )
+
+# Staff Grievance Details
+@app.route('/staff/grievance/<int:grievance_id>', methods=['GET', 'POST'])
+@staff_required
+def staff_grievance_details(grievance_id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    staff_id = session['user_id']
+    
+    # Get grievance details
+    cursor.execute("""
+        SELECT g.*, 
+               u.name as student_name, u.email as student_email, u.department as student_dept, u.profile_photo as student_photo
+        FROM grievances g 
+        JOIN users u ON g.user_id = u.id 
+        WHERE g.id = %s AND g.staff_id = %s
+    """, (grievance_id, staff_id))
+    grievance = cursor.fetchone()
+    
+    if not grievance:
+        flash('Grievance not found or you do not have access.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('staff_dashboard'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action', '').strip()
+        remarks = request.form.get('remarks', '').strip()
+        if action == 'resolve' and remarks:
+            # Update grievance status to in-progress (hidden from student view)
+            cursor.execute("""
+                UPDATE grievances 
+                SET status = %s, remarks = %s, staff_approved = TRUE, warden_resolved = FALSE, updated_at = NOW()
+                WHERE id = %s
+            """, ('in-progress', remarks, grievance_id))
+            conn.commit()
+            
+            # Create notification for authority
+            cursor.execute("""
+                INSERT INTO notifications (user_id, message, is_read, created_at)
+                SELECT id, %s, FALSE, NOW() FROM users 
+                WHERE role IN ('department', 'principal', 'admin')
+            """, (f'Grievance #{grievance_id} has been resolved by staff and is waiting for your approval.',))
+            conn.commit()
+            
+            flash('Grievance marked as resolved successfully!', 'success')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('staff_dashboard'))
+        elif action == 'need_info':
+            # Update status to indicate more info needed
+            cursor.execute("""
+                UPDATE grievances 
+                SET status = %s, remarks = %s, updated_at = NOW()
+                WHERE id = %s
+            """, ('staff_review', remarks, grievance_id))
+            conn.commit()
+            flash('Note added. Waiting for more information.', 'info')
+        else:
+            flash('Please fill in all required fields.', 'danger')
+    
+    # Get replies for this grievance
+    cursor.execute("""
+        SELECT gr.*, u.name as sender_name, u.role as sender_role, u.profile_photo as sender_photo 
+        FROM grievance_replies gr 
+        JOIN users u ON gr.sender_id = u.id 
+        WHERE gr.grievance_id = %s 
+        ORDER BY gr.created_at ASC
+    """, (grievance_id,))
+    replies = cursor.fetchall()
+    
+    # Mask anonymity if the grievance is anonymous
+    if grievance and grievance.get('is_anonymous'):
+        grievance['student_name'] = 'Anonymous Student'
+        grievance['student_email'] = 'N/A (Anonymous)'
+        grievance['student_dept'] = 'N/A'
+        grievance['student_photo'] = 'default.png'
+        
+        for r in replies:
+            if r.get('sender_role') == 'student':
+                r['sender_name'] = 'Anonymous Student'
+                r['sender_photo'] = 'default.png'
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template(
+        'staff_grievance_details.html',
+        grievance=grievance,
+        replies=replies
+    )
+
+# Staff Add Reply
+@app.route('/staff/grievance/<int:grievance_id>/reply', methods=['POST'])
+@staff_required
+def staff_add_reply(grievance_id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    staff_id = session['user_id']
+    
+    # Verify grievance is assigned to this staff member
+    cursor.execute("SELECT id FROM grievances WHERE id = %s AND staff_id = %s", (grievance_id, staff_id))
+    if not cursor.fetchone():
+        flash('Access denied.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('staff_dashboard'))
+    
+    message = request.form.get('message', '').strip()
+    if message:
+        cursor.execute("""
+            INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+            VALUES (%s, %s, %s, NOW())
+        """, (grievance_id, staff_id, message))
+        conn.commit()
+        flash('Reply added successfully!', 'success')
+    else:
+        flash('Please enter a message.', 'danger')
+    
+    cursor.close()
+    conn.close()
+    return redirect(url_for('staff_grievance_details', grievance_id=grievance_id))
+
+# Warden Dashboard
+@app.route('/warden')
+@warden_required
+def warden_dashboard():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    warden_id = session['user_id']
+    
+    # Count grievances by status
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE warden_id = %s AND status = 'pending'
+    """, (warden_id,))
+    pending_count = cursor.fetchone()['count']
+    
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE warden_id = %s AND status = 'staff_review'
+    """, (warden_id,))
+    in_review_count = cursor.fetchone()['count']
+    
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE warden_id = %s AND status = 'in-progress'
+    """, (warden_id,))
+    resolved_count = cursor.fetchone()['count']
+    
+    # Get all grievances assigned to this warden
+    cursor.execute("""
+        SELECT g.*, u.name as student_name, u.email as student_email 
+        FROM grievances g 
+        JOIN users u ON g.user_id = u.id 
+        WHERE g.warden_id = %s 
+        ORDER BY g.created_at DESC
+    """, (warden_id,))
+    grievances = cursor.fetchall()
+    for g in grievances:
+        if g.get('is_anonymous'):
+            g['student_name'] = 'Anonymous Student'
+            g['student_email'] = 'N/A'
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template(
+        'staff_dashboard.html',
+        grievances=grievances,
+        pending_count=pending_count,
+        in_review_count=in_review_count,
+        resolved_count=resolved_count
+    )
+
+# Warden Grievance Details
+@app.route('/warden/grievance/<int:grievance_id>', methods=['GET', 'POST'])
+@warden_required
+def warden_grievance_details(grievance_id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    warden_id = session['user_id']
+    
+    # Get grievance details
+    cursor.execute("""
+        SELECT g.*, 
+               u.name as student_name, u.email as student_email, u.department as student_dept, u.profile_photo as student_photo
+        FROM grievances g 
+        JOIN users u ON g.user_id = u.id 
+        WHERE g.id = %s AND g.warden_id = %s
+    """, (grievance_id, warden_id))
+    grievance = cursor.fetchone()
+    
+    if not grievance:
+        flash('Grievance not found or you do not have access.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('warden_dashboard'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action', '').strip()
+        remarks = request.form.get('remarks', '').strip()
+        
+        if action == 'resolve' and remarks:
+            # Update grievance status to in-progress (hidden from student view)
+            cursor.execute("""
+                UPDATE grievances 
+                SET status = %s, remarks = %s, warden_resolved = TRUE, staff_approved = FALSE, updated_at = NOW()
+                WHERE id = %s
+            """, ('in-progress', remarks, grievance_id))
+            conn.commit()
+            
+            # Create notification for authority
+            cursor.execute("""
+                INSERT INTO notifications (user_id, message, is_read, created_at)
+                SELECT id, %s, FALSE, NOW() FROM users 
+                WHERE role IN ('department', 'principal', 'admin')
+            """, (f'Grievance #{grievance_id} has been resolved by warden and is waiting for your approval.',))
+            conn.commit()
+            
+            flash('Grievance marked as resolved successfully!', 'success')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('warden_dashboard'))
+        elif action == 'need_info':
+            cursor.execute("""
+                UPDATE grievances 
+                SET status = %s, remarks = %s, updated_at = NOW()
+                WHERE id = %s
+            """, ('staff_review', remarks, grievance_id))
+            conn.commit()
+            flash('Note added. Waiting for more information.', 'info')
+        else:
+            flash('Please fill in all required fields.', 'danger')
+    
+    # Get replies
+    cursor.execute("""
+        SELECT gr.*, u.name as sender_name, u.role as sender_role, u.profile_photo as sender_photo 
+        FROM grievance_replies gr 
+        JOIN users u ON gr.sender_id = u.id 
+        WHERE gr.grievance_id = %s 
+        ORDER BY gr.created_at ASC
+    """, (grievance_id,))
+    replies = cursor.fetchall()
+    
+    # Mask anonymity if the grievance is anonymous
+    if grievance and grievance.get('is_anonymous'):
+        grievance['student_name'] = 'Anonymous Student'
+        grievance['student_email'] = 'N/A (Anonymous)'
+        grievance['student_dept'] = 'N/A'
+        grievance['student_photo'] = 'default.png'
+        
+        for r in replies:
+            if r.get('sender_role') == 'student':
+                r['sender_name'] = 'Anonymous Student'
+                r['sender_photo'] = 'default.png'
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template(
+        'staff_grievance_details.html',
+        grievance=grievance,
+        replies=replies
+    )
+
+# Warden Add Reply
+@app.route('/warden/grievance/<int:grievance_id>/reply', methods=['POST'])
+@warden_required
+def warden_add_reply(grievance_id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    warden_id = session['user_id']
+    
+    cursor.execute("SELECT id FROM grievances WHERE id = %s AND warden_id = %s", (grievance_id, warden_id))
+    if not cursor.fetchone():
+        flash('Access denied.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('warden_dashboard'))
+    
+    message = request.form.get('message', '').strip()
+    if message:
+        cursor.execute("""
+            INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+            VALUES (%s, %s, %s, NOW())
+        """, (grievance_id, warden_id, message))
+        conn.commit()
+        flash('Reply added successfully!', 'success')
+    else:
+        flash('Please enter a message.', 'danger')
+    
+    cursor.close()
+    conn.close()
+    return redirect(url_for('warden_grievance_details', grievance_id=grievance_id))
+
 # Submit Grievance (Student)
 @app.route('/submit-grievance', methods=['GET', 'POST'])
 @login_required
@@ -566,34 +946,39 @@ def submit_grievance():
 
         # Automatic Routing Assignment
         assigned_to = None
+        staff_id = None
+        warden_id = None
+        targets_authority = False
+        
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
         if targets_staff:
-            # Direct staff grievances are handled directly by the Complaint Authority
+            # Grievances targeting staff go directly to Complaint Authority
             cursor.execute("SELECT id FROM users WHERE role = 'department' LIMIT 1")
             dept_auth = cursor.fetchone()
             if dept_auth:
                 assigned_to = dept_auth['id']
+            targets_authority = True
         else:
             if category == 'Department':
-                # Route to first Department Authority
-                cursor.execute("SELECT id FROM users WHERE role = 'department' LIMIT 1")
-                dept_auth = cursor.fetchone()
-                if dept_auth:
-                    assigned_to = dept_auth['id']
+                # Route to first available Staff member
+                cursor.execute("SELECT id FROM users WHERE role = 'staff' LIMIT 1")
+                staff_member = cursor.fetchone()
+                if staff_member:
+                    staff_id = staff_member['id']
             elif category == 'Hostel':
-                # Route to first Hostel Warden found
+                # Route to first available Hostel Warden
                 cursor.execute("SELECT id FROM users WHERE role = 'warden' LIMIT 1")
-                warden_auth = cursor.fetchone()
-                if warden_auth:
-                    assigned_to = warden_auth['id']
+                warden_member = cursor.fetchone()
+                if warden_member:
+                    warden_id = warden_member['id']
 
         # Save to DB
         cursor.execute(
-            """INSERT INTO grievances (user_id, assigned_to, title, category, target_department, description, attachment, priority, is_anonymous, targets_staff) 
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (session['user_id'], assigned_to, title, category, target_department if category == 'Department' else None, description, filename, priority, is_anonymous, targets_staff)
+            """INSERT INTO grievances (user_id, assigned_to, staff_id, warden_id, title, category, target_department, description, attachment, priority, is_anonymous, targets_staff, targets_authority, status) 
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (session['user_id'], assigned_to, staff_id, warden_id, title, category, target_department if category == 'Department' else None, description, filename, priority, is_anonymous, targets_staff, targets_authority, 'pending')
         )
         conn.commit()
         grievance_id = cursor.lastrowid
@@ -605,13 +990,16 @@ def submit_grievance():
             (session['user_id'], notification_msg)
         )
         
-        # Notify assigned authority
-        if assigned_to:
-            notif_auth_msg = f"New {category} complaint #{grievance_id} has been routed to you: '{title}'."
-            cursor.execute(
-                "INSERT INTO notifications (user_id, message) VALUES (%s, %s)",
-                (assigned_to, notif_auth_msg)
-            )
+        # Notify assigned staff/warden/authority
+        if staff_id:
+            notif_msg = f"New Department grievance #{grievance_id} assigned to you: '{title}'."
+            cursor.execute("INSERT INTO notifications (user_id, message) VALUES (%s, %s)", (staff_id, notif_msg))
+        elif warden_id:
+            notif_msg = f"New Hostel grievance #{grievance_id} assigned to you: '{title}'."
+            cursor.execute("INSERT INTO notifications (user_id, message) VALUES (%s, %s)", (warden_id, notif_msg))
+        elif assigned_to:
+            notif_msg = f"New grievance #{grievance_id} targeting staff/warden assigned to you: '{title}'."
+            cursor.execute("INSERT INTO notifications (user_id, message) VALUES (%s, %s)", (assigned_to, notif_msg))
             
         # Notify Principal and Admin
         notif_system_msg = f"New {category} grievance #{grievance_id} submitted: '{title}'."
@@ -648,6 +1036,7 @@ def my_grievances():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
+    # Students can view all of their grievances
     query = "SELECT * FROM grievances WHERE user_id = %s"
     params = [user_id]
     
@@ -721,11 +1110,16 @@ def grievance_details(id):
     
     is_authorized_authority = False
     if role == 'department':
-        # Department Authority can access both Department and Hostel complaints
+        # Department Authority can access grievances targeting staff/warden and targets_authority
         is_authorized_authority = True
-    elif role == 'warden' and grievance['category'] == 'Hostel':
+    elif role == 'staff' and grievance['staff_id'] == session['user_id']:
+        # Staff can access their assigned grievances
         is_authorized_authority = True
-        
+    elif role == 'warden' and grievance['warden_id'] == session['user_id']:
+        # Warden can access their assigned grievances
+        is_authorized_authority = True
+    
+
     if not is_admin and not is_principal and not is_student_owner and not is_authorized_authority:
         flash('Access denied.', 'danger')
         cursor.close()
@@ -759,8 +1153,8 @@ def grievance_details(id):
     cursor.close()
     conn.close()
     
-    # Mask anonymity if the grievance is anonymous and the current user is not the student owner
-    if grievance.get('is_anonymous') and not is_student_owner:
+    # Mask anonymity if the grievance is anonymous
+    if grievance.get('is_anonymous'):
         grievance['student_name'] = 'Anonymous Student'
         grievance['student_email'] = 'N/A (Anonymous)'
         grievance['student_dept'] = 'N/A'
@@ -1109,7 +1503,7 @@ def update_status(id):
     if role == 'warden' and status == 'resolved':
         # Warden resolves, goes to pending approval (stays in-progress for student)
         cursor.execute(
-            "UPDATE grievances SET status = 'in-progress', warden_resolved = TRUE, remarks = %s WHERE id = %s", 
+            "UPDATE grievances SET status = 'in-progress', warden_resolved = TRUE, staff_approved = FALSE, remarks = %s WHERE id = %s", 
             (remarks if remarks else None, id)
         )
         status_for_msg = "Warden Resolved (Pending Authority Review)"
@@ -1118,7 +1512,7 @@ def update_status(id):
     elif role == 'department' and status == 'resolved':
         # Authority resolves, officially approved and set to resolved
         cursor.execute(
-            "UPDATE grievances SET status = 'resolved', warden_resolved = FALSE, remarks = %s WHERE id = %s", 
+            "UPDATE grievances SET status = 'resolved', warden_resolved = FALSE, staff_approved = FALSE, remarks = %s WHERE id = %s", 
             (remarks if remarks else None, id)
         )
         status_for_msg = "resolved"
@@ -1130,7 +1524,7 @@ def update_status(id):
             (status, remarks if remarks else None, id)
         )
         if role in ['department', 'warden']:
-            cursor.execute("UPDATE grievances SET warden_resolved = FALSE WHERE id = %s", (id,))
+            cursor.execute("UPDATE grievances SET warden_resolved = FALSE, staff_approved = FALSE WHERE id = %s", (id,))
         status_for_msg = status
         notif_msg = f"Your grievance #{id} status was updated to '{status}' with remarks: '{remarks[:60]}...'."
         system_reply = f"[STATUS UPDATE]: Status changed to {status.upper()}.\nRemarks: {remarks if remarks else 'None'}"

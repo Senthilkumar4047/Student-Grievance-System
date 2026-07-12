@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if session.get('role') == 'warden' %}
+        Warden Dashboard - Student Grievance Portal
+    {% else %}
+        Staff Dashboard - Student Grievance Portal
+    {% endif %}
+{% endblock %}
+
+{% block header_title %}
+    {% if session.get('role') == 'warden' %}
+        Hostel Warden Dashboard
+    {% else %}
+        Department Staff Dashboard
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="page-title-group">
+        <h1 class="page-title">
+            {% if session.get('role') == 'warden' %}
+                Welcome, Warden!
+            {% else %}
+                Welcome, Staff!
+            {% endif %}
+        </h1>
+        <p class="page-subtitle">Review, address, and update status of assigned student complaints.</p>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="card-grid">
+
+    <div class="card stat-card" style="border-left: 4px solid var(--primary);">
+        <div class="stat-icon primary">
+            <i class="fa-solid fa-receipt"></i>
+        </div>
+        <div class="stat-details">
+            <span class="stat-number">{{ pending_count + in_review_count + resolved_count }}</span>
+            <span class="stat-label">Total Assigned</span>
+        </div>
+    </div>
+
+    <div class="card stat-card" style="border-left: 4px solid var(--warning);">
+        <div class="stat-icon warning">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+        </div>
+        <div class="stat-details">
+            <span class="stat-number">{{ pending_count }}</span>
+            <span class="stat-label">Pending Review</span>
+        </div>
+    </div>
+
+    <div class="card stat-card" style="border-left: 4px solid var(--info);">
+        <div class="stat-icon info">
+            <i class="fa-solid fa-spinner fa-spin-pulse"></i>
+        </div>
+        <div class="stat-details">
+            <span class="stat-number">{{ in_review_count }}</span>
+            <span class="stat-label">In Review</span>
+        </div>
+    </div>
+
+    <div class="card stat-card" style="border-left: 4px solid var(--success);">
+        <div class="stat-icon success">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div class="stat-details">
+            <span class="stat-number">{{ resolved_count }}</span>
+            <span class="stat-label">Resolved Concerns</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- Grievances Table Section -->
+<div class="card" style="display:flex; flex-direction:column; gap:16px; margin-top: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Assigned Grievances Log</h3>
+    </div>
+    
+    {% if grievances %}
+    <div class="table-responsive">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Student Details</th>
+                    <th>Subject / Title</th>
+                    <th>Category</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Date Submitted</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for grievance in grievances %}
+                <tr>
+                    <td style="font-weight: 700; color: var(--primary);">#{{ grievance.id }}</td>
+                    <td>
+                        <div style="font-weight: 600;">
+                            {{ grievance.student_name }}
+                            {% if grievance.is_anonymous %}
+                                <span style="font-size: 11px; font-style: italic; color: var(--text-hint); display: block;">(Anonymous)</span>
+                            {% endif %}
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">{{ grievance.student_email }}</div>
+                    </td>
+                    <td>
+                        <div style="font-weight: 600;">{{ grievance.title }}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            {{ grievance.description }}
+                        </div>
+                    </td>
+                    <td>{{ grievance.category }}</td>
+                    <td>
+                        {% if grievance.priority == 'low' %}
+                            <span class="pill pill-low">{{ grievance.priority }}</span>
+                        {% elif grievance.priority == 'medium' %}
+                            <span class="pill pill-medium">{{ grievance.priority }}</span>
+                        {% else %}
+                            <span class="pill pill-high">{{ grievance.priority }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if grievance.status == 'pending' %}
+                            <span class="pill pill-pending">Pending</span>
+                        {% elif grievance.status == 'staff_review' %}
+                            <span class="pill pill-warning" style="background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">In Review</span>
+                        {% elif grievance.status == 'in-progress' or grievance.status == 'in_progress' %}
+                            {% if grievance.warden_resolved %}
+                                <span class="pill pill-warning" style="font-size: 11px; padding: 4px 8px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">Warden Resolved</span>
+                            {% elif grievance.staff_approved %}
+                                <span class="pill pill-warning" style="font-size: 11px; padding: 4px 8px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">Staff Resolved</span>
+                            {% else %}
+                                <span class="pill pill-in-progress">In Progress</span>
+                            {% endif %}
+                        {% elif grievance.status == 'resolved' %}
+                            <span class="pill pill-resolved">Resolved</span>
+                        {% else %}
+                            <span class="pill">{{ grievance.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="color: var(--text-secondary);">
+                        {{ grievance.created_at.strftime('%Y-%m-%d %H:%M') }}
+                    </td>
+                    <td>
+                        {% if session.get('role') == 'warden' %}
+                            <a href="{{ url_for('warden_grievance_details', grievance_id=grievance.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                <i class="fa-solid fa-eye-dropper"></i> Manage
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('staff_grievance_details', grievance_id=grievance.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                <i class="fa-solid fa-eye-dropper"></i> Manage
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="padding: 60px; text-align: center;">
+        <i class="fa-solid fa-clipboard-question" style="font-size: 48px; color: var(--text-hint); margin-bottom: 16px;"></i>
+        <h3 style="font-size: 18px; margin-bottom: 8px;">No Complaints Assigned</h3>
+        <p style="color: var(--text-secondary); max-width: 420px; margin: 0 auto;">There are no grievances currently assigned to your account.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

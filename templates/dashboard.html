@@ -155,23 +155,33 @@
 
                         <td>
 
-                            {% if g.status=="pending" %}
+                            {% if g.status == "pending" %}
                             <span class="pill pill-pending">
                                 Pending
                             </span>
 
-                            {% elif g.status=="in-progress" %}
-                                {% if g.warden_resolved and session.get('role') != 'student' %}
-                                <span class="pill pill-warning" style="font-size: 11px; padding: 4px 8px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">
-                                    Warden Resolved (Pending Review)
-                                </span>
+                            {% elif g.status == "in-progress" or g.status == "in_progress" %}
+                                {% if session.get('role') != 'student' %}
+                                    {% if g.warden_resolved %}
+                                    <span class="pill pill-warning" style="font-size: 11px; padding: 4px 8px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">
+                                        Warden Resolved (Pending Review)
+                                    </span>
+                                    {% elif g.staff_approved %}
+                                    <span class="pill pill-warning" style="font-size: 11px; padding: 4px 8px; background-color: rgba(212, 175, 55, 0.15); color: #d4af37; border: 1px solid rgba(212, 175, 55, 0.3);">
+                                        Staff Resolved (Pending Review)
+                                    </span>
+                                    {% else %}
+                                    <span class="pill pill-in-progress">
+                                        In Progress
+                                    </span>
+                                    {% endif %}
                                 {% else %}
                                 <span class="pill pill-in-progress">
                                     In Progress
                                 </span>
                                 {% endif %}
 
-                            {% elif g.status=="resolved" %}
+                            {% elif g.status == "resolved" %}
 
                             <span class="pill pill-resolved">
                                 Resolved
