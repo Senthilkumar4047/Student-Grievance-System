@@ -129,6 +129,7 @@
             <select name="role" id="role" class="form-control" onchange="this.form.submit()">
                 <option value="all" {% if role_filter == 'all' %}selected{% endif %}>All Roles</option>
                 <option value="student" {% if role_filter == 'student' %}selected{% endif %}>Students</option>
+                <option value="staff" {% if role_filter == 'staff' %}selected{% endif %}>Department Staff 👔</option>
                 <option value="department" {% if role_filter == 'department' %}selected{% endif %}>Department Authorities</option>
                 <option value="warden" {% if role_filter == 'warden' %}selected{% endif %}>Hostel Wardens</option>
                 <option value="principal" {% if role_filter == 'principal' %}selected{% endif %}>Principal</option>
@@ -172,15 +173,17 @@
                 </td>
                 <td>
                     {% if user.role == 'admin' %}
-                        <span class="pill pill-resolved" style="background-color: var(--primary-light); color: var(--primary); font-size: 11px;"><i class="fa-solid fa-user-shield"></i> Admin</span>
+                        <span class="pill pill-resolved" style="background-color: var(--primary-light); color: var(--primary); font-size: 11px;"><i class="fa-solid fa-user-shield"></i> Admin 🛠️</span>
                     {% elif user.role == 'principal' %}
-                        <span class="pill pill-info" style="font-size: 11px;"><i class="fa-solid fa-building-columns"></i> Principal</span>
+                        <span class="pill pill-info" style="font-size: 11px;"><i class="fa-solid fa-building-columns"></i> Principal 🏛️</span>
                     {% elif user.role == 'department' %}
-                        <span class="pill pill-pending" style="font-size: 11px; background-color: #fef3c7; color: #d97706;"><i class="fa-solid fa-circle-nodes"></i> Complaint Authority</span>
+                        <span class="pill pill-pending" style="font-size: 11px; background-color: #fef3c7; color: #d97706;"><i class="fa-solid fa-circle-nodes"></i> Complaint Authority 🏢</span>
                     {% elif user.role == 'warden' %}
-                        <span class="pill pill-warning" style="font-size: 11px;"><i class="fa-solid fa-house-chimney-user"></i> Warden</span>
+                        <span class="pill pill-warning" style="font-size: 11px;"><i class="fa-solid fa-house-chimney-user"></i> Warden 🏠</span>
+                    {% elif user.role == 'staff' %}
+                        <span class="pill" style="font-size: 11px; background-color: #e0f2fe; color: #0369a1;"><i class="fa-solid fa-user-tie"></i> Department Staff 👔</span>
                     {% else %}
-                        <span class="pill" style="font-size: 11px; background-color: var(--bg-app); color: var(--text-secondary);"><i class="fa-solid fa-graduation-cap"></i> Student</span>
+                        <span class="pill" style="font-size: 11px; background-color: var(--bg-app); color: var(--text-secondary);"><i class="fa-solid fa-graduation-cap"></i> Student 🎓</span>
                     {% endif %}
                 </td>
                 <td>{{ user.department or 'N/A' }}</td>
@@ -265,6 +268,7 @@
                 <label for="addRole" class="form-label">User Role</label>
                 <select name="role" id="addRole" class="form-control" required onchange="toggleAddDeptField()">
                     <option value="student">Student</option>
+                    <option value="staff">Department Staff 👔</option>
                     <option value="department">Complaint Authority</option>
                     <option value="warden">Hostel Warden</option>
                     <option value="principal">Principal</option>
@@ -317,6 +321,7 @@
                 <label for="editRole" class="form-label">User Role</label>
                 <select name="role" id="editRole" class="form-control" required onchange="toggleEditDeptField()">
                     <option value="student">Student</option>
+                    <option value="staff">Department Staff 👔</option>
                     <option value="department">Complaint Authority</option>
                     <option value="warden">Hostel Warden</option>
                     <option value="principal">Principal</option>

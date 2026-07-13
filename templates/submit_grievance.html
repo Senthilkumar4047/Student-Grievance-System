@@ -25,7 +25,7 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 20px;">
             <div class="form-group" style="margin-bottom: 0;">
                 <label for="gCategory" class="form-label">Grievance Type <span style="color: var(--danger);">*</span></label>
-                <select name="category" id="gCategory" class="form-control" required onchange="toggleDepartmentSelect()">
+                <select name="category" id="gCategory" class="form-control" required>
                     <option value="" disabled selected>Select a type...</option>
                     <option value="Department">Department Complaint</option>
                     <option value="Hostel">Hostel Complaint</option>
@@ -46,19 +46,6 @@
                     </label>
                 </div>
             </div>
-        </div>
-        
-        <!-- Target Department (shown conditionally) -->
-        <div class="form-group" id="deptSelectGroup" style="display: none; margin-bottom: 20px;">
-            <label for="gTargetDepartment" class="form-label">Target Department <span style="color: var(--danger);">*</span></label>
-            <select name="target_department" id="gTargetDepartment" class="form-control">
-                <option value="" disabled selected>Select department...</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Electrical Engineering">Electrical Engineering</option>
-                <option value="Mechanical Engineering">Mechanical Engineering</option>
-                <option value="Civil Engineering">Civil Engineering</option>
-                <option value="Business Administration">Business Administration</option>
-            </select>
         </div>
         
         <!-- Description -->
@@ -120,22 +107,6 @@
 
 {% block scripts %}
 <script>
-    // Toggle Department selection based on Category Type
-    function toggleDepartmentSelect() {
-        const category = document.getElementById('gCategory').value;
-        const deptGroup = document.getElementById('deptSelectGroup');
-        const deptInput = document.getElementById('gTargetDepartment');
-        
-        if (category === 'Department') {
-            deptGroup.style.display = 'block';
-            deptInput.required = true;
-        } else {
-            deptGroup.style.display = 'none';
-            deptInput.required = false;
-            deptInput.value = '';
-        }
-    }
-
     // Attachment Drag and Drop support
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('gAttachment');

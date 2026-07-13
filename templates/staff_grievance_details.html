@@ -94,16 +94,6 @@
                     <span style="font-size: 13px; color: var(--text-secondary);">{{ grievance.student_email }}</span>
                 </div>
                 <div class="meta-info-item">
-                    <span>Assigned To:</span>
-                    <span>
-                        {% if session.get('role') == 'warden' %}
-                            <strong style="color: var(--primary);">Hostel Warden</strong>
-                        {% else %}
-                            <strong style="color: var(--primary);">Department Staff</strong>
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="meta-info-item">
                     <span>Submitted On:</span>
                     <span>{{ grievance.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                 </div>
@@ -143,7 +133,7 @@
         {% endif %}
         
         <!-- Status Action Update panel -->
-        {% if grievance.status == 'pending' or grievance.status == 'staff_review' %}
+        {% if grievance.status == 'pending' or grievance.status == 'staff_review' or (grievance.status == 'in-progress' and not grievance.staff_approved and not grievance.warden_resolved) or (grievance.status == 'in_progress' and not grievance.staff_approved and not grievance.warden_resolved) %}
         <div class="card" style="display: flex; flex-direction: column; gap: 12px; border-left: 4px solid var(--primary);">
             <h3 style="font-size: 16px;"><i class="fa-solid fa-circle-info"></i> Update Status & Remarks</h3>
             
@@ -152,7 +142,8 @@
                     <label for="actionStatus" class="form-label">Grievance Status:</label>
                     <select name="action" id="actionStatus" class="form-control" required style="margin-bottom: 12px;">
                         <option value="need_info" {% if grievance.status == 'staff_review' %}selected{% endif %}>Pending review</option>
-                        <option value="resolve">Ready to Resolve</option>
+                        <option value="in_progress" {% if grievance.status == 'in-progress' or grievance.status == 'in_progress' %}selected{% endif %}>In progress</option>
+                        <option value="resolve" {% if grievance.status == 'resolved' %}selected{% endif %}>Mark as Resolved</option>
                     </select>
                 </div>
                 
@@ -216,7 +207,14 @@
                     {% set is_self = (reply.sender_id == session['user_id']) %}
                     <div class="message-bubble {% if is_self %}self{% else %}other{% endif %}">
                         <div class="message-info">
-                            <span style="font-weight: 600;">{{ reply.sender_name }} ({{ reply.sender_role | upper }})</span>
+                            <span style="font-weight: 600;">
+                                {{ reply.sender_name }} 
+                                {% if reply.sender_role == 'staff' %}
+                                    (STAFF 👔)
+                                {% else %}
+                                    ({{ reply.sender_role | upper }})
+                                {% endif %}
+                            </span>
                             <span>{{ reply.created_at.strftime('%H:%M | %b %d') }}</span>
                         </div>
                         <div class="message-body">

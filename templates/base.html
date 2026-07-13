@@ -56,17 +56,17 @@
                     <span class="user-name">{{ session.get('name') }}</span>
                     <span class="user-role">
                         {% if session.get('role') == 'admin' %}
-                            Admin
+                            Admin 🛠️
                         {% elif session.get('role') == 'principal' %}
-                            Principal
+                            Principal 🏛️
                         {% elif session.get('role') == 'staff' %}
-                            Department Staff
+                            Department Staff 👔
                         {% elif session.get('role') == 'department' %}
-                            Complaint Authority
+                            Complaint Authority 🏢
                         {% elif session.get('role') == 'warden' %}
-                            Hostel Warden
+                            Hostel Warden 🏠
                         {% else %}
-                            Student
+                            Student 🎓
                         {% endif %}
                     </span>
                 </div>

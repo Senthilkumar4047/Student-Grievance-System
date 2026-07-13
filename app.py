@@ -652,6 +652,14 @@ def staff_grievance_details(grievance_id):
             """, (f'Grievance #{grievance_id} has been resolved by staff and is waiting for your approval.',))
             conn.commit()
             
+            # Add timeline update message
+            system_reply = f"[STATUS UPDATE]: Department Staff has marked the complaint as resolved. Pending final review by Complaint Authority.\nRemarks: {remarks}"
+            cursor.execute("""
+                INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (grievance_id, staff_id, system_reply))
+            conn.commit()
+            
             flash('Grievance marked as resolved successfully!', 'success')
             cursor.close()
             conn.close()
@@ -664,7 +672,34 @@ def staff_grievance_details(grievance_id):
                 WHERE id = %s
             """, ('staff_review', remarks, grievance_id))
             conn.commit()
+            
+            # Add timeline update message
+            system_reply = f"[STATUS UPDATE]: Department Staff has updated status to PENDING REVIEW.\nRemarks: {remarks if remarks else 'None'}"
+            cursor.execute("""
+                INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (grievance_id, staff_id, system_reply))
+            conn.commit()
+            
             flash('Note added. Waiting for more information.', 'info')
+        elif action == 'in_progress':
+            # Update status to in progress
+            cursor.execute("""
+                UPDATE grievances 
+                SET status = %s, remarks = %s, staff_approved = FALSE, warden_resolved = FALSE, updated_at = NOW()
+                WHERE id = %s
+            """, ('in-progress', remarks if remarks else None, grievance_id))
+            conn.commit()
+            
+            # Add timeline update message
+            system_reply = f"[STATUS UPDATE]: Department Staff has updated status to IN PROGRESS.\nRemarks: {remarks if remarks else 'None'}"
+            cursor.execute("""
+                INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (grievance_id, staff_id, system_reply))
+            conn.commit()
+            
+            flash('Grievance marked as in progress.', 'info')
         else:
             flash('Please fill in all required fields.', 'danger')
     
@@ -827,6 +862,14 @@ def warden_grievance_details(grievance_id):
             """, (f'Grievance #{grievance_id} has been resolved by warden and is waiting for your approval.',))
             conn.commit()
             
+            # Add timeline update message
+            system_reply = f"[STATUS UPDATE]: Warden has marked the complaint as resolved. Pending final review by Complaint Authority.\nRemarks: {remarks}"
+            cursor.execute("""
+                INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (grievance_id, warden_id, system_reply))
+            conn.commit()
+            
             flash('Grievance marked as resolved successfully!', 'success')
             cursor.close()
             conn.close()
@@ -838,7 +881,34 @@ def warden_grievance_details(grievance_id):
                 WHERE id = %s
             """, ('staff_review', remarks, grievance_id))
             conn.commit()
+            
+            # Add timeline update message
+            system_reply = f"[STATUS UPDATE]: Warden has updated status to PENDING REVIEW.\nRemarks: {remarks if remarks else 'None'}"
+            cursor.execute("""
+                INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (grievance_id, warden_id, system_reply))
+            conn.commit()
+            
             flash('Note added. Waiting for more information.', 'info')
+        elif action == 'in_progress':
+            # Update status to in progress
+            cursor.execute("""
+                UPDATE grievances 
+                SET status = %s, remarks = %s, staff_approved = FALSE, warden_resolved = FALSE, updated_at = NOW()
+                WHERE id = %s
+            """, ('in-progress', remarks if remarks else None, grievance_id))
+            conn.commit()
+            
+            # Add timeline update message
+            system_reply = f"[STATUS UPDATE]: Warden has updated status to IN PROGRESS.\nRemarks: {remarks if remarks else 'None'}"
+            cursor.execute("""
+                INSERT INTO grievance_replies (grievance_id, sender_id, message, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (grievance_id, warden_id, system_reply))
+            conn.commit()
+            
+            flash('Grievance marked as in progress.', 'info')
         else:
             flash('Please fill in all required fields.', 'danger')
     
@@ -921,10 +991,6 @@ def submit_grievance():
         # Validation
         if not title or not category or not description:
             flash('Please fill in all required fields.', 'danger')
-            return render_template('submit_grievance.html')
-            
-        if category == 'Department' and not target_department:
-            flash('Please select a target department.', 'danger')
             return render_template('submit_grievance.html')
             
         if priority not in ['low', 'medium', 'high']:
@@ -1550,56 +1616,6 @@ def update_status(id):
     flash(f"Grievance status updated to '{status}' with remarks.", 'success')
     return redirect(url_for('grievance_details', id=id))
 
-# Authority - Assign Grievance to Warden
-@app.route('/authority/assign-grievance/<int:id>', methods=['POST'])
-@login_required
-def assign_grievance(id):
-    if session.get('role') != 'department':
-        flash('Access denied.', 'danger')
-        return redirect(url_for('dashboard'))
-        
-    staff_id_raw = request.form.get('staff_id', '').strip()
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    cursor.execute("SELECT user_id, title, targets_staff FROM grievances WHERE id = %s", (id,))
-    grievance = cursor.fetchone()
-    
-    if not grievance:
-        flash('Grievance not found.', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('dashboard'))
-        
-    if grievance['targets_staff']:
-        flash('This complaint targets a staff member/warden. The Complaint Authority must handle this case directly in consultation with the Principal.', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('grievance_details', id=id))
-        
-    staff_id = int(staff_id_raw) if staff_id_raw and staff_id_raw.isdigit() else None
-    
-    cursor.execute("UPDATE grievances SET assigned_to = %s WHERE id = %s", (staff_id, id))
-    conn.commit()
-    
-    if staff_id:
-        cursor.execute("SELECT name FROM users WHERE id = %s", (staff_id,))
-        staff_name = cursor.fetchone()['name']
-        
-        student_msg = f"Your grievance #{id} '{grievance['title']}' has been reassigned to: {staff_name}."
-        cursor.execute("INSERT INTO notifications (user_id, message) VALUES (%s, %s)", (grievance['user_id'], student_msg))
-        
-        staff_msg = f"Grievance #{id} '{grievance['title']}' has been assigned to you for action."
-        cursor.execute("INSERT INTO notifications (user_id, message) VALUES (%s, %s)", (staff_id, staff_msg))
-        
-        conn.commit()
-        flash(f"Grievance successfully assigned to {staff_name}.", 'success')
-    else:
-        flash("Grievance assignment cleared.", 'info')
-        
-    cursor.close()
-    conn.close()
-    return redirect(url_for('grievance_details', id=id))
 
 # Authority - Update Grievance Priority
 @app.route('/authority/update-priority/<int:id>', methods=['POST'])
