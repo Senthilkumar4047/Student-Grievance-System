@@ -1409,8 +1409,22 @@ def profile():
                 flash('Name is required.', 'danger')
                 return redirect(url_for('profile'))
                 
+            remove_photo = request.form.get('remove_photo', '0') == '1'
+            
             photo_filename = session.get('profile_photo', 'default.png')
-            if profile_photo and profile_photo.filename != '':
+            if remove_photo:
+                role = session.get('role', 'student')
+                role_defaults = {
+                    'admin': 'admin.png',
+                    'student': 'student.png',
+                    'staff': 'staff.png',
+                    'department': 'authority.png',
+                    'warden': 'warden.png',
+                    'principal': 'principal.png'
+                }
+                photo_filename = role_defaults.get(role, 'default.png')
+                session['profile_photo'] = photo_filename
+            elif profile_photo and profile_photo.filename != '':
                 if allowed_file(profile_photo.filename):
                     file_ext = profile_photo.filename.rsplit('.', 1)[1].lower()
                     photo_filename = f"user_{session['user_id']}_{secrets.token_hex(5)}.{file_ext}"

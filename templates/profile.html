@@ -5,6 +5,16 @@
 {% block header_title %}My Profile{% endblock %}
 
 {% block content %}
+{% set default_photos = {
+    'admin': 'admin.png',
+    'student': 'student.png',
+    'staff': 'staff.png',
+    'department': 'authority.png',
+    'warden': 'warden.png',
+    'principal': 'principal.png'
+} %}
+{% set default_photo = default_photos.get(user.role, 'default.png') %}
+
 <div class="page-header">
     <div class="page-title-group">
         <h1 class="page-title">Profile Settings</h1>
@@ -28,6 +38,21 @@
                     <input type="file" name="profile_photo" id="profilePhotoInput" accept="image/*" data-preview-id="photoPreview">
                 </label>
             </div>
+            
+            <input type="hidden" name="remove_photo" id="removePhotoInput" value="0">
+            <div id="removePhotoContainer" style="margin-top: 8px; margin-bottom: 16px; {% if user.profile_photo == default_photo %}display: none;{% endif %}">
+                <button type="button" class="btn btn-sm" id="btnRemovePhoto" style="font-size: 11px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--danger); background: transparent; color: var(--danger); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;">
+                    <i class="fa-solid fa-trash-can"></i> Remove Photo
+                </button>
+            </div>
+            
+            <style>
+                #btnRemovePhoto:hover {
+                    background-color: var(--danger) !important;
+                    color: #ffffff !important;
+                    opacity: 0.9;
+                }
+            </style>
             
             <h2 style="font-size: 18px; margin-bottom: 4px;">{{ user.name }}</h2>
             <span class="pill pill-resolved" style="background-color: var(--primary-light); color: var(--primary); text-transform: uppercase; font-size: 11px; font-weight: 700; padding: 4px 10px; margin-bottom: 24px;">
@@ -121,6 +146,10 @@
     // Profile picture preview
     const photoInput = document.getElementById('profilePhotoInput');
     const photoPreview = document.getElementById('photoPreview');
+    const removePhotoInput = document.getElementById('removePhotoInput');
+    const removePhotoContainer = document.getElementById('removePhotoContainer');
+    const btnRemovePhoto = document.getElementById('btnRemovePhoto');
+    const defaultPhotoUrl = "{{ url_for('static', filename='uploads/' + default_photo) }}";
     
     photoInput.addEventListener('change', () => {
         const file = photoInput.files[0];
@@ -142,11 +171,28 @@
                 photoPreview.src = e.target.result;
                 const sidebarAv = document.getElementById('sidebarAvatar');
                 if (sidebarAv) sidebarAv.src = e.target.result;
+                
+                // Reset remove photo input flag and show remove button
+                if (removePhotoInput) removePhotoInput.value = '0';
+                if (removePhotoContainer) removePhotoContainer.style.display = 'block';
+                
                 showToast('Profile photo preview updated. Click "Save Changes" to finalize.', 'info');
             };
             reader.readAsDataURL(file);
         }
     });
+
+    if (btnRemovePhoto) {
+        btnRemovePhoto.addEventListener('click', () => {
+            photoInput.value = '';
+            if (removePhotoInput) removePhotoInput.value = '1';
+            photoPreview.src = defaultPhotoUrl;
+            const sidebarAv = document.getElementById('sidebarAvatar');
+            if (sidebarAv) sidebarAv.src = defaultPhotoUrl;
+            if (removePhotoContainer) removePhotoContainer.style.display = 'none';
+            showToast('Profile photo marked for removal. Click "Save Changes" to finalize.', 'info');
+        });
+    }
 
     // Check strength of profile password alteration input
     function checkPassStrength() {
