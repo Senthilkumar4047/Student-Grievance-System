@@ -34,17 +34,17 @@
 <!-- Statistics Cards -->
 <div class="card-grid">
 
-    <div class="card stat-card" style="border-left: 4px solid var(--primary);">
+    <a href="{{ url_for('grievance_history') }}" class="card stat-card" style="border-left: 4px solid var(--primary); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon primary">
             <i class="fa-solid fa-receipt"></i>
         </div>
         <div class="stat-details">
-            <span class="stat-number">{{ pending_count + in_review_count + resolved_count }}</span>
+            <span class="stat-number">{{ total_count or 0 }}</span>
             <span class="stat-label">Total Assigned</span>
         </div>
-    </div>
+    </a>
 
-    <div class="card stat-card" style="border-left: 4px solid var(--warning);">
+    <a href="{{ url_for('grievance_history', status='pending') }}" class="card stat-card" style="border-left: 4px solid var(--warning); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon warning">
             <i class="fa-solid fa-clock-rotate-left"></i>
         </div>
@@ -52,9 +52,9 @@
             <span class="stat-number">{{ pending_count }}</span>
             <span class="stat-label">Pending Review</span>
         </div>
-    </div>
+    </a>
 
-    <div class="card stat-card" style="border-left: 4px solid var(--info);">
+    <a href="{{ url_for('grievance_history', status='in-progress') }}" class="card stat-card" style="border-left: 4px solid var(--info); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon info">
             <i class="fa-solid fa-spinner fa-spin-pulse"></i>
         </div>
@@ -62,9 +62,9 @@
             <span class="stat-number">{{ in_review_count }}</span>
             <span class="stat-label">In Review</span>
         </div>
-    </div>
+    </a>
 
-    <div class="card stat-card" style="border-left: 4px solid var(--success);">
+    <a href="{{ url_for('grievance_history', status='resolved') }}" class="card stat-card" style="border-left: 4px solid var(--success); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon success">
             <i class="fa-solid fa-circle-check"></i>
         </div>
@@ -72,7 +72,7 @@
             <span class="stat-number">{{ resolved_count }}</span>
             <span class="stat-label">Resolved Concerns</span>
         </div>
-    </div>
+    </a>
 
 </div>
 
@@ -149,15 +149,20 @@
                         {{ grievance.created_at.strftime('%Y-%m-%d %H:%M') }}
                     </td>
                     <td>
-                        {% if session.get('role') == 'warden' %}
-                            <a href="{{ url_for('warden_grievance_details', grievance_id=grievance.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
-                                <i class="fa-solid fa-eye-dropper"></i> Manage
+                        <div style="display: flex; gap: 16px;">
+                            {% if session.get('role') == 'warden' %}
+                                <a href="{{ url_for('warden_grievance_details', grievance_id=grievance.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                    <i class="fa-solid fa-eye-dropper"></i> Manage
+                                </a>
+                            {% else %}
+                                <a href="{{ url_for('staff_grievance_details', grievance_id=grievance.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                    <i class="fa-solid fa-eye-dropper"></i> Manage
+                                </a>
+                            {% endif %}
+                            <a href="{{ url_for('delete_grievance_ui', id=grievance.id) }}" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="event.preventDefault(); const href = this.href; showCustomConfirm('Are you sure want to remove this Grievance?', function() { window.location.href = href; });">
+                                <i class="fa-solid fa-trash"></i> Remove
                             </a>
-                        {% else %}
-                            <a href="{{ url_for('staff_grievance_details', grievance_id=grievance.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
-                                <i class="fa-solid fa-eye-dropper"></i> Manage
-                            </a>
-                        {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

@@ -49,7 +49,11 @@ Student Dashboard
 <!-- Statistics Cards -->
 <div class="card-grid">
 
+    {% if session.get('role') in ['student', 'department'] %}
+    <a href="{{ url_for('grievance_history') }}" class="card stat-card" style="border-left: 4px solid var(--primary); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
+    {% else %}
     <div class="card stat-card" style="border-left: 4px solid var(--primary);">
+    {% endif %}
         <div class="stat-icon primary">
             <i class="fa-solid fa-receipt"></i>
         </div>
@@ -63,9 +67,17 @@ Student Dashboard
                 {% endif %}
             </span>
         </div>
+    {% if session.get('role') in ['student', 'department'] %}
+    </a>
+    {% else %}
     </div>
+    {% endif %}
 
+    {% if session.get('role') in ['student', 'department'] %}
+    <a href="{{ url_for('grievance_history', status='pending') }}" class="card stat-card" style="border-left: 4px solid var(--warning); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
+    {% else %}
     <div class="card stat-card" style="border-left: 4px solid var(--warning);">
+    {% endif %}
         <div class="stat-icon warning">
             <i class="fa-solid fa-clock-rotate-left"></i>
         </div>
@@ -73,9 +85,17 @@ Student Dashboard
             <span class="stat-number">{{ pending or 0 }}</span>
             <span class="stat-label">Pending Review</span>
         </div>
+    {% if session.get('role') in ['student', 'department'] %}
+    </a>
+    {% else %}
     </div>
+    {% endif %}
 
+    {% if session.get('role') in ['student', 'department'] %}
+    <a href="{{ url_for('grievance_history', status='in-progress') }}" class="card stat-card" style="border-left: 4px solid var(--info); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
+    {% else %}
     <div class="card stat-card" style="border-left: 4px solid var(--info);">
+    {% endif %}
         <div class="stat-icon info">
             <i class="fa-solid fa-spinner fa-spin-pulse"></i>
         </div>
@@ -83,9 +103,17 @@ Student Dashboard
             <span class="stat-number">{{ inprogress or 0 }}</span>
             <span class="stat-label">In Progress</span>
         </div>
+    {% if session.get('role') in ['student', 'department'] %}
+    </a>
+    {% else %}
     </div>
+    {% endif %}
 
+    {% if session.get('role') in ['student', 'department'] %}
+    <a href="{{ url_for('grievance_history', status='resolved') }}" class="card stat-card" style="border-left: 4px solid var(--success); text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
+    {% else %}
     <div class="card stat-card" style="border-left: 4px solid var(--success);">
+    {% endif %}
         <div class="stat-icon success">
             <i class="fa-solid fa-circle-check"></i>
         </div>
@@ -93,11 +121,15 @@ Student Dashboard
             <span class="stat-number">{{ resolved or 0 }}</span>
             <span class="stat-label">Resolved Concerns</span>
         </div>
+    {% if session.get('role') in ['student', 'department'] %}
+    </a>
+    {% else %}
     </div>
+    {% endif %}
 
 </div>
 
-<div class="details-grid {% if session.get('role') == 'student' %}student-grid{% else %}staff-grid{% endif %}">
+<div class="details-grid {% if session.get('role') in ['student', 'department'] %}student-grid{% else %}staff-grid{% endif %}">
 
     <div class="card" style="display:flex;flex-direction:column;gap:16px;">
 
@@ -201,12 +233,19 @@ Student Dashboard
                         </td>
 
                         <td>
-
-                            <a href="{{ url_for('grievance_details', id=g.id) }}" class="btn btn-secondary"
-                                style="padding: 6px 12px; font-size: 13px;">
-                                View
-                            </a>
-
+                            <div style="display: flex; gap: 16px;">
+                                <a href="{{ url_for('grievance_details', id=g.id) }}" class="btn btn-secondary"
+                                    style="padding: 6px 12px; font-size: 13px;">
+                                    View
+                                </a>
+                                {% if session.get('role') in ['student', 'department'] %}
+                                <a href="{{ url_for('delete_grievance_ui', id=g.id) }}" class="btn btn-danger"
+                                    style="padding: 6px 12px; font-size: 13px;"
+                                    onclick="event.preventDefault(); const href = this.href; showCustomConfirm('Are you sure want to remove this Grievance?', function() { window.location.href = href; });">
+                                    <i class="fa-solid fa-trash"></i> Remove
+                                </a>
+                                {% endif %}
+                            </div>
                         </td>
 
                     </tr>
@@ -240,7 +279,7 @@ Student Dashboard
 
     </div>
 
-    {% if session.get('role') != 'student' %}
+    {% if session.get('role') != 'student' and session.get('role') != 'department' %}
     <!-- Activities & Notifications -->
     <div class="card" style="display:flex;flex-direction:column;gap:16px;">
 

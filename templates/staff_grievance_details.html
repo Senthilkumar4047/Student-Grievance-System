@@ -132,12 +132,30 @@
         </div>
         {% endif %}
         
+        <!-- Resolved Evidence Display Card -->
+        {% if grievance.resolved_evidence %}
+        <div class="card" style="border-left: 4px solid var(--success); display: flex; flex-direction: column; gap: 8px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: var(--success);"><i class="fa-solid fa-file-shield"></i> Resolution Evidence:</h4>
+            <div class="card" style="padding: 12px; display: flex; align-items: center; justify-content: space-between; background-color: var(--bg-app); box-shadow: none; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">
+                    <i class="fa-solid {% if grievance.resolved_evidence.endswith('.zip') %}fa-file-zipper{% else %}fa-file-image{% endif %}" style="font-size: 24px; color: var(--success);"></i>
+                    <span style="font-size: 13px; font-weight: 500;">{{ grievance.resolved_evidence }}</span>
+                </div>
+                <div>
+                    <a href="{{ url_for('uploaded_file', filename=grievance.resolved_evidence) }}" target="_blank" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px; background-color: var(--success); border-color: var(--success); color: white;">
+                        <i class="fa-solid fa-download"></i> View Evidence
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
         <!-- Status Action Update panel -->
         {% if grievance.status == 'pending' or grievance.status == 'staff_review' or (grievance.status == 'in-progress' and not grievance.staff_approved and not grievance.warden_resolved) or (grievance.status == 'in_progress' and not grievance.staff_approved and not grievance.warden_resolved) %}
         <div class="card" style="display: flex; flex-direction: column; gap: 12px; border-left: 4px solid var(--primary);">
             <h3 style="font-size: 16px;"><i class="fa-solid fa-circle-info"></i> Update Status & Remarks</h3>
             
-            <form method="post" style="display: flex; flex-direction: column; gap: 12px;">
+            <form method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 12px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label for="actionStatus" class="form-label">Grievance Status:</label>
                     <select name="action" id="actionStatus" class="form-control" required style="margin-bottom: 12px;">
@@ -151,6 +169,36 @@
                     <label for="actionRemarks" class="form-label">Official Action Remarks / Comments:</label>
                     <textarea name="remarks" id="actionRemarks" class="form-control" placeholder="Provide action steps or details of resolution..." style="min-height: 80px; padding: 10px;" required>{{ grievance.remarks or '' }}</textarea>
                 </div>
+                
+                {% if session.get('role') == 'warden' %}
+                <!-- Evidence Upload Section for Warden -->
+                <div class="form-group" id="evidenceUploadGroup" style="margin-top: 12px; display: none;">
+                    <label class="form-label" style="font-weight: 600; margin-bottom: 8px; display: block;">Resolution Evidence (Optional):</label>
+                    
+                    <div style="display: flex; gap: 16px; margin-bottom: 8px;">
+                        <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="evidence_type" value="file" checked onclick="toggleEvidenceInput('file')">
+                            <span>Image / File</span>
+                        </label>
+                        <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="evidence_type" value="folder" onclick="toggleEvidenceInput('folder')">
+                            <span>Folder</span>
+                        </label>
+                    </div>
+
+                    <!-- File Input -->
+                    <div id="fileEvidenceInput">
+                        <input type="file" name="resolved_evidence_file" id="resolvedEvidenceFile" class="form-control" accept="image/*,application/pdf,application/zip,application/x-zip-compressed" style="padding: 6px 12px;">
+                        <span class="form-help" style="font-size: 11px; color: var(--text-hint); display: block; margin-top: 4px;">Upload an image, PDF or ZIP file as evidence.</span>
+                    </div>
+
+                    <!-- Folder Input -->
+                    <div id="folderEvidenceInput" style="display: none;">
+                        <input type="file" name="resolved_evidence_folder" id="resolvedEvidenceFolder" class="form-control" webkitdirectory directory multiple disabled style="padding: 6px 12px;">
+                        <span class="form-help" style="font-size: 11px; color: var(--text-hint); display: block; margin-top: 4px;">Select a folder to upload all its contents as evidence.</span>
+                    </div>
+                </div>
+                {% endif %}
                 
                 <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
                     <i class="fa-solid fa-save"></i> Save Status & Remarks
@@ -250,6 +298,43 @@
     const chatMsgArea = document.getElementById('chatMsgArea');
     if (chatMsgArea) {
         chatMsgArea.scrollTop = chatMsgArea.scrollHeight;
+    }
+
+    // Dynamic evidence upload fields toggle
+    const actionStatus = document.getElementById('actionStatus');
+    const evidenceUploadGroup = document.getElementById('evidenceUploadGroup');
+    
+    function toggleEvidenceGroup() {
+        if (actionStatus && actionStatus.value === 'resolve') {
+            if (evidenceUploadGroup) evidenceUploadGroup.style.display = 'block';
+        } else {
+            if (evidenceUploadGroup) evidenceUploadGroup.style.display = 'none';
+        }
+    }
+    
+    if (actionStatus) {
+        actionStatus.addEventListener('change', toggleEvidenceGroup);
+        // Run on load to set correct state
+        toggleEvidenceGroup();
+    }
+    
+    function toggleEvidenceInput(type) {
+        const fileDiv = document.getElementById('fileEvidenceInput');
+        const folderDiv = document.getElementById('folderEvidenceInput');
+        const fileInput = document.getElementById('resolvedEvidenceFile');
+        const folderInput = document.getElementById('resolvedEvidenceFolder');
+        
+        if (type === 'file') {
+            if (fileDiv) fileDiv.style.display = 'block';
+            if (folderDiv) folderDiv.style.display = 'none';
+            if (fileInput) fileInput.disabled = false;
+            if (folderInput) folderInput.disabled = true;
+        } else {
+            if (fileDiv) fileDiv.style.display = 'none';
+            if (folderDiv) folderDiv.style.display = 'block';
+            if (fileInput) fileInput.disabled = true;
+            if (folderInput) folderInput.disabled = false;
+        }
     }
 </script>
 {% endblock %}

@@ -5,6 +5,63 @@
 {% block header_title %}File a New Grievance{% endblock %}
 
 {% block content %}
+<style>
+    /* Premium Modal Styles */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(15, 23, 42, 0.4);
+        backdrop-filter: blur(8px);
+        z-index: 10000;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    .modal-overlay.show {
+        display: flex;
+        opacity: 1;
+    }
+    .modal-container {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 28px;
+        max-width: 480px;
+        width: 95%;
+        box-shadow: var(--shadow-lg);
+        transform: translateY(20px);
+        transition: transform 0.3s ease;
+    }
+    .modal-overlay.show .modal-container {
+        transform: translateY(0);
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 12px;
+    }
+    .modal-close-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        color: var(--text-hint);
+        cursor: pointer;
+        padding: 0 4px;
+        line-height: 1;
+    }
+    .modal-close-btn:hover {
+        color: var(--danger);
+    }
+</style>
+
 <div class="page-header">
     <div class="page-title-group">
         <h1 class="page-title">Grievance Submission Form</h1>
@@ -76,7 +133,7 @@
         <!-- Anonymous check -->
         <div class="form-group" style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 16px;">
             <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--text-primary);">
-                <input type="checkbox" name="is_anonymous" value="1" style="accent-color: var(--primary); width: 16px; height: 16px; margin: 0;">
+                <input type="checkbox" name="is_anonymous" id="isAnonymousCheck" value="1" style="accent-color: var(--primary); width: 16px; height: 16px; margin: 0;">
                 <strong>Submit Anonymously</strong>
             </label>
             <span style="display: block; font-size: 12px; color: var(--text-hint); margin-top: 4px; margin-left: 24px;">
@@ -102,6 +159,31 @@
         </div>
         
     </form>
+</div>
+
+<!-- Custom Confirmation Modal for Anonymous Submission -->
+<div class="modal-overlay" id="anonymousConfirmModal">
+    <div class="modal-container" style="max-width: 480px;">
+        <div class="modal-header" style="border-bottom: none; margin-bottom: 8px; padding-bottom: 0;">
+            <h3 style="margin: 0; color: var(--danger); font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                Confirm Anonymous Submission
+            </h3>
+            <button type="button" class="modal-close-btn" id="closeConfirmModalBtn">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 8px 0 20px 0;">
+            <p style="font-size: 14px; line-height: 1.5; color: var(--text-primary); margin: 0 0 16px 0;">
+                Submitting false or misleading complaints is against college policy. The system securely records your account details for misuse investigation if required.
+            </p>
+            <p style="font-size: 13.5px; font-weight: 500; color: var(--text-secondary); margin: 0;">
+                Are you sure you want to submit this grievance anonymously?
+            </p>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <button type="button" class="btn btn-secondary" id="cancelSubmitBtn" style="padding: 8px 16px;">Cancel</button>
+            <button type="button" class="btn btn-primary" id="confirmSubmitBtn" style="background-color: var(--danger); border-color: var(--danger); padding: 8px 16px;">Okay</button>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -173,6 +255,47 @@
         previewContainer.style.display = 'none';
         document.getElementById('attachmentPreview_name').textContent = '';
         document.getElementById('attachmentPreview').src = '';
+    }
+
+    // Form submission control with Anonymous Warning Modal
+    const grievanceForm = document.getElementById('grievanceForm');
+    const isAnonymousCheck = document.getElementById('isAnonymousCheck');
+    const anonymousConfirmModal = document.getElementById('anonymousConfirmModal');
+    const confirmSubmitBtn = document.getElementById('confirmSubmitBtn');
+    const cancelSubmitBtn = document.getElementById('cancelSubmitBtn');
+    const closeConfirmModalBtn = document.getElementById('closeConfirmModalBtn');
+
+    if (grievanceForm && isAnonymousCheck && anonymousConfirmModal) {
+        grievanceForm.addEventListener('submit', function(e) {
+            if (isAnonymousCheck.checked) {
+                e.preventDefault(); // Stop standard form submission
+                anonymousConfirmModal.classList.add('show');
+            }
+        });
+
+        // Close modal helper
+        function closeModal() {
+            anonymousConfirmModal.classList.remove('show');
+        }
+
+        // Event listeners for closing
+        if (cancelSubmitBtn) cancelSubmitBtn.addEventListener('click', closeModal);
+        if (closeConfirmModalBtn) closeConfirmModalBtn.addEventListener('click', closeModal);
+        
+        // Close if click outside container
+        anonymousConfirmModal.addEventListener('click', function(e) {
+            if (e.target === anonymousConfirmModal) {
+                closeModal();
+            }
+        });
+
+        // Confirm submit
+        if (confirmSubmitBtn) {
+            confirmSubmitBtn.addEventListener('click', function() {
+                closeModal();
+                grievanceForm.submit(); // Submit the form programmatically
+            });
+        }
     }
 </script>
 {% endblock %}

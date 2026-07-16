@@ -550,7 +550,7 @@ def dashboard():
             """SELECT g.*, u.name as student_name, u.email as student_email 
                FROM grievances g 
                JOIN users u ON g.user_id = u.id 
-               WHERE g.category IN ('Department', 'Hostel') 
+               WHERE g.category IN ('Department', 'Hostel') AND g.authority_deleted = FALSE
                ORDER BY g.created_at DESC LIMIT 5"""
         )
         recent_grievances = cursor.fetchall()
@@ -593,7 +593,7 @@ def dashboard():
         inprogress_g = cursor.fetchone()['count']
         
         cursor.execute(
-            "SELECT * FROM grievances WHERE user_id = %s ORDER BY created_at DESC LIMIT 5",
+            "SELECT * FROM grievances WHERE user_id = %s AND student_deleted = FALSE ORDER BY created_at DESC LIMIT 5",
             (user_id,)
         )
         recent_grievances = cursor.fetchall()
@@ -638,6 +638,13 @@ def staff_dashboard():
     staff_user = cursor.fetchone()
     staff_dept = staff_user['department'] if staff_user else None
     
+    # Count total grievances (unfiltered by deletion to prevent dropping to zero)
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE staff_id = %s
+    """, (staff_id,))
+    total_count = cursor.fetchone()['count']
+
     # Count grievances by status
     cursor.execute("""
         SELECT COUNT(*) as count FROM grievances 
@@ -657,12 +664,12 @@ def staff_dashboard():
     """, (staff_id,))
     resolved_count = cursor.fetchone()['count']
     
-    # Get all grievances assigned to this staff member
+    # Get all active grievances assigned to this staff member
     cursor.execute("""
         SELECT g.*, u.name as student_name, u.email as student_email 
         FROM grievances g 
         JOIN users u ON g.user_id = u.id 
-        WHERE g.staff_id = %s 
+        WHERE g.staff_id = %s AND g.staff_deleted = FALSE
         ORDER BY g.created_at DESC
     """, (staff_id,))
     grievances = cursor.fetchall()
@@ -679,7 +686,8 @@ def staff_dashboard():
         grievances=grievances,
         pending_count=pending_count,
         in_review_count=in_review_count,
-        resolved_count=resolved_count
+        resolved_count=resolved_count,
+        total_count=total_count
     )
 
 # Staff Grievance Details
@@ -847,6 +855,13 @@ def warden_dashboard():
     cursor = conn.cursor(dictionary=True)
     warden_id = session['user_id']
     
+    # Count total grievances (unfiltered by deletion to prevent dropping to zero)
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM grievances 
+        WHERE warden_id = %s
+    """, (warden_id,))
+    total_count = cursor.fetchone()['count']
+
     # Count grievances by status
     cursor.execute("""
         SELECT COUNT(*) as count FROM grievances 
@@ -866,12 +881,12 @@ def warden_dashboard():
     """, (warden_id,))
     resolved_count = cursor.fetchone()['count']
     
-    # Get all grievances assigned to this warden
+    # Get all active grievances assigned to this warden
     cursor.execute("""
         SELECT g.*, u.name as student_name, u.email as student_email 
         FROM grievances g 
         JOIN users u ON g.user_id = u.id 
-        WHERE g.warden_id = %s 
+        WHERE g.warden_id = %s AND g.warden_deleted = FALSE
         ORDER BY g.created_at DESC
     """, (warden_id,))
     grievances = cursor.fetchall()
@@ -888,7 +903,8 @@ def warden_dashboard():
         grievances=grievances,
         pending_count=pending_count,
         in_review_count=in_review_count,
-        resolved_count=resolved_count
+        resolved_count=resolved_count,
+        total_count=total_count
     )
 
 # Warden Grievance Details
@@ -920,12 +936,40 @@ def warden_grievance_details(grievance_id):
         remarks = request.form.get('remarks', '').strip()
         
         if action == 'resolve' and remarks:
+            import zipfile
+            resolved_evidence = None
+            evidence_type = request.form.get('evidence_type', 'file')
+            
+            if evidence_type == 'folder':
+                folder_files = request.files.getlist('resolved_evidence_folder')
+                folder_files = [f for f in folder_files if f.filename != '']
+                if folder_files:
+                    zip_filename = f"evidence_folder_{secrets.token_hex(10)}.zip"
+                    zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
+                    with zipfile.ZipFile(zip_path, 'w') as zipf:
+                        for file in folder_files:
+                            rel_path = file.filename
+                            rel_path = os.path.normpath(rel_path).replace('\\', '/')
+                            if rel_path.startswith('/') or '..' in rel_path:
+                                rel_path = os.path.basename(rel_path)
+                            file_data = file.read()
+                            zipf.writestr(rel_path, file_data)
+                    resolved_evidence = zip_filename
+            else:
+                evidence_file = request.files.get('resolved_evidence_file')
+                if evidence_file and evidence_file.filename != '':
+                    if allowed_file(evidence_file.filename):
+                        file_ext = evidence_file.filename.rsplit('.', 1)[1].lower()
+                        unique_filename = f"evidence_{secrets.token_hex(10)}.{file_ext}"
+                        evidence_file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+                        resolved_evidence = unique_filename
+
             # Update grievance status to in-progress (hidden from student view)
             cursor.execute("""
                 UPDATE grievances 
-                SET status = %s, remarks = %s, warden_resolved = TRUE, staff_approved = FALSE, updated_at = NOW()
+                SET status = %s, remarks = %s, warden_resolved = TRUE, staff_approved = FALSE, resolved_evidence = %s, updated_at = NOW()
                 WHERE id = %s
-            """, ('in-progress', remarks, grievance_id))
+            """, ('in-progress', remarks, resolved_evidence, grievance_id))
             conn.commit()
             
             # Create notification for authority
@@ -1178,8 +1222,8 @@ def my_grievances():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
-    # Students can view all of their grievances
-    query = "SELECT * FROM grievances WHERE user_id = %s"
+    # Students can view all of their active grievances
+    query = "SELECT * FROM grievances WHERE user_id = %s AND student_deleted = FALSE"
     params = [user_id]
     
     if status_filter != 'all':
@@ -1335,7 +1379,6 @@ def reply_grievance(id):
         
     # Check permissions
     role = session.get('role')
-    is_admin = (role == 'admin')
     is_principal = (role == 'principal')
     is_owner = (grievance['user_id'] == session['user_id'])
     
@@ -1346,7 +1389,7 @@ def reply_grievance(id):
     elif role == 'warden' and grievance['category'] == 'Hostel':
         is_authorized_authority = True
         
-    if not is_admin and not is_principal and not is_owner and not is_authorized_authority:
+    if not is_principal and not is_owner and not is_authorized_authority:
         flash('Access denied.', 'danger')
         cursor.close()
         conn.close()
@@ -1498,13 +1541,13 @@ def admin_dashboard():
     cursor.execute("SELECT COUNT(*) as total FROM grievances")
     total_grievances = cursor.fetchone()['total']
     
-    cursor.execute("SELECT COUNT(*) as pending FROM grievances WHERE status = 'pending'")
+    cursor.execute("SELECT COUNT(*) as pending FROM grievances WHERE status = 'pending' AND admin_deleted = FALSE")
     pending_grievances = cursor.fetchone()['pending']
     
-    cursor.execute("SELECT COUNT(*) as inprogress FROM grievances WHERE status = 'in-progress'")
+    cursor.execute("SELECT COUNT(*) as inprogress FROM grievances WHERE status = 'in-progress' AND admin_deleted = FALSE")
     inprogress_grievances = cursor.fetchone()['inprogress']
     
-    cursor.execute("SELECT COUNT(*) as resolved FROM grievances WHERE status = 'resolved'")
+    cursor.execute("SELECT COUNT(*) as resolved FROM grievances WHERE status = 'resolved' AND admin_deleted = FALSE")
     resolved_grievances = cursor.fetchone()['resolved']
     
     # Recent pending grievances
@@ -1512,6 +1555,7 @@ def admin_dashboard():
         """SELECT g.*, u.name as student_name 
            FROM grievances g 
            JOIN users u ON g.user_id = u.id 
+           WHERE g.admin_deleted = FALSE
            ORDER BY g.created_at DESC LIMIT 5"""
     )
     recent_grievances = cursor.fetchall()
@@ -1560,13 +1604,23 @@ def admin_chart_data():
     )
     monthly = cursor.fetchall()
     
+    # Status Distribution
+    cursor.execute("SELECT status, COUNT(*) as count FROM grievances GROUP BY status")
+    statuses = cursor.fetchall()
+    
+    # Priority Distribution
+    cursor.execute("SELECT priority, COUNT(*) as count FROM grievances GROUP BY priority")
+    priorities = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
     return jsonify({
         'categories': {item['category']: item['count'] for item in categories},
         'departments': {item['target_department'] if item['target_department'] else 'Unspecified': item['count'] for item in dept_stats},
-        'monthly': {item['month']: item['count'] for item in monthly}
+        'monthly': {item['month']: item['count'] for item in monthly},
+        'statuses': {item['status']: item['count'] for item in statuses},
+        'priorities': {item['priority']: item['count'] for item in priorities}
     })
 
 # Admin Grievance Management Center
@@ -1654,8 +1708,8 @@ def update_status(id):
     role = session.get('role')
     is_authorized = False
     
-    if role == 'department':
-        # Complaint Authority can update status of any Department or Hostel complaint
+    if role in ['department', 'principal']:
+        # Complaint Authority or Principal can update status of any Department or Hostel complaint
         is_authorized = True
     elif role == 'warden' and grievance['category'] == 'Hostel':
         # Warden can update status of Hostel complaints, unless it targets staff
@@ -1671,29 +1725,58 @@ def update_status(id):
     # Update Status & Remarks based on role
     status_for_msg = status
     if role == 'warden' and status == 'resolved':
+        import zipfile
+        resolved_evidence = None
+        evidence_type = request.form.get('evidence_type', 'file')
+        
+        if evidence_type == 'folder':
+            folder_files = request.files.getlist('resolved_evidence_folder')
+            folder_files = [f for f in folder_files if f.filename != '']
+            if folder_files:
+                zip_filename = f"evidence_folder_{secrets.token_hex(10)}.zip"
+                zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for file in folder_files:
+                        rel_path = file.filename
+                        rel_path = os.path.normpath(rel_path).replace('\\', '/')
+                        if rel_path.startswith('/') or '..' in rel_path:
+                            rel_path = os.path.basename(rel_path)
+                        file_data = file.read()
+                        zipf.writestr(rel_path, file_data)
+                resolved_evidence = zip_filename
+        else:
+            evidence_file = request.files.get('resolved_evidence_file')
+            if evidence_file and evidence_file.filename != '':
+                if allowed_file(evidence_file.filename):
+                    file_ext = evidence_file.filename.rsplit('.', 1)[1].lower()
+                    unique_filename = f"evidence_{secrets.token_hex(10)}.{file_ext}"
+                    evidence_file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+                    resolved_evidence = unique_filename
+
         # Warden resolves, goes to pending approval (stays in-progress for student)
         cursor.execute(
-            "UPDATE grievances SET status = 'in-progress', warden_resolved = TRUE, staff_approved = FALSE, remarks = %s WHERE id = %s", 
-            (remarks if remarks else None, id)
+            "UPDATE grievances SET status = 'in-progress', warden_resolved = TRUE, staff_approved = FALSE, remarks = %s, resolved_evidence = %s WHERE id = %s", 
+            (remarks if remarks else None, resolved_evidence, id)
         )
         status_for_msg = "Warden Resolved (Pending Authority Review)"
         notif_msg = f"Your grievance #{id} has been reviewed and resolved by the Warden. It is now undergoing final review."
         system_reply = f"[STATUS UPDATE]: Warden has marked the complaint as resolved. Pending final review by Complaint Authority.\nRemarks: {remarks if remarks else 'None'}"
-    elif role == 'department' and status == 'resolved':
-        # Authority resolves, officially approved and set to resolved
+    elif role in ['department', 'principal'] and status == 'resolved':
+        # Authority or Principal resolves, officially approved and set to resolved
         cursor.execute(
             "UPDATE grievances SET status = 'resolved', warden_resolved = FALSE, staff_approved = FALSE, remarks = %s WHERE id = %s", 
             (remarks if remarks else None, id)
         )
         status_for_msg = "resolved"
-        notif_msg = f"Your grievance #{id} status was officially resolved by the Complaint Authority with remarks: '{remarks[:60]}...'."
-        system_reply = f"[STATUS UPDATE]: Complaint Authority has approved and officially marked the grievance as RESOLVED.\nRemarks: {remarks if remarks else 'None'}"
+        role_title = "Principal" if role == 'principal' else "Complaint Authority"
+        notif_msg = f"Your grievance #{id} status was officially resolved by the {role_title} with remarks: '{remarks[:60]}...'."
+        system_reply = f"[STATUS UPDATE]: {role_title} has approved and officially marked the grievance as RESOLVED.\nRemarks: {remarks if remarks else 'None'}"
     else:
         cursor.execute(
             "UPDATE grievances SET status = %s, remarks = %s WHERE id = %s", 
             (status, remarks if remarks else None, id)
         )
-        if role in ['department', 'warden']:
+        if role in ['department', 'principal', 'warden']:
             cursor.execute("UPDATE grievances SET warden_resolved = FALSE, staff_approved = FALSE WHERE id = %s", (id,))
         status_for_msg = status
         notif_msg = f"Your grievance #{id} status was updated to '{status}' with remarks: '{remarks[:60]}...'."
@@ -1725,7 +1808,7 @@ def update_status(id):
 @app.route('/authority/update-priority/<int:id>', methods=['POST'])
 @login_required
 def update_priority(id):
-    if session.get('role') != 'department':
+    if session.get('role') not in ['department', 'principal']:
         flash('Access denied.', 'danger')
         return redirect(url_for('dashboard'))
         
@@ -1750,15 +1833,7 @@ def update_priority(id):
 @app.route('/admin/delete-grievance/<int:id>', methods=['POST'])
 @admin_required
 def delete_grievance(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("DELETE FROM grievances WHERE id = %s", (id,))
-    resequence_grievances(cursor)
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    flash(f"Grievance #{id} has been deleted.", 'success')
+    flash('Grievances must be stored permanently. Deletion is disabled.', 'danger')
     return redirect(url_for('admin_grievances'))
 
 # Admin - Manage Registered Users (List View)
@@ -1981,39 +2056,37 @@ def principal_dashboard():
     cursor.execute("SELECT COUNT(*) as count FROM grievances")
     total_g = cursor.fetchone()['count']
     
-    cursor.execute("SELECT COUNT(*) as count FROM grievances WHERE status = 'pending'")
+    cursor.execute("SELECT COUNT(*) as count FROM grievances WHERE status = 'pending' AND principal_deleted = FALSE")
     pending_g = cursor.fetchone()['count']
     
-    cursor.execute("SELECT COUNT(*) as count FROM grievances WHERE status = 'in-progress'")
+    cursor.execute("SELECT COUNT(*) as count FROM grievances WHERE status = 'in-progress' AND principal_deleted = FALSE")
     inprogress_g = cursor.fetchone()['count']
     
-    cursor.execute("SELECT COUNT(*) as count FROM grievances WHERE status = 'resolved'")
+    cursor.execute("SELECT COUNT(*) as count FROM grievances WHERE status = 'resolved' AND principal_deleted = FALSE")
     resolved_g = cursor.fetchone()['count']
     
-    # Department Reports
+    # Recent grievances
     cursor.execute(
-        """SELECT target_department as dept, 
-                  COUNT(*) as total, 
-                  SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END) as resolved,
-                  SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending,
-                  SUM(CASE WHEN status='in-progress' THEN 1 ELSE 0 END) as inprogress
-           FROM grievances 
-           WHERE category='Department' 
-           GROUP BY target_department"""
+        """SELECT g.*, u.name as student_name, u.email as student_email 
+           FROM grievances g 
+           JOIN users u ON g.user_id = u.id 
+           WHERE g.principal_deleted = FALSE
+           ORDER BY g.created_at DESC LIMIT 5"""
     )
-    dept_reports = cursor.fetchall()
+    recent_grievances = cursor.fetchall()
     
-    # Hostel Reports
-    cursor.execute("SELECT COUNT(*) as total FROM grievances WHERE category='Hostel'")
-    hostel_total = cursor.fetchone()['total']
-    
-    cursor.execute("SELECT COUNT(*) as resolved FROM grievances WHERE category='Hostel' AND status='resolved'")
-    hostel_resolved = cursor.fetchone()['resolved']
-    
-    # Resolution Rate Math
-    res_rate = 0
-    if total_g > 0:
-        res_rate = round((resolved_g / total_g) * 100, 1)
+    for g in recent_grievances:
+        if g.get('is_anonymous'):
+            g['student_name'] = 'Anonymous'
+            g['student_email'] = 'N/A'
+            
+    # Recent activities (notifications for principal)
+    user_id = session['user_id']
+    cursor.execute(
+        "SELECT * FROM notifications WHERE user_id = %s ORDER BY created_at DESC LIMIT 5",
+        (user_id,)
+    )
+    activities = cursor.fetchall()
         
     cursor.close()
     conn.close()
@@ -2024,10 +2097,8 @@ def principal_dashboard():
         pending=pending_g,
         inprogress=inprogress_g,
         resolved=resolved_g,
-        dept_reports=dept_reports,
-        hostel_total=hostel_total,
-        hostel_resolved=hostel_resolved,
-        resolution_rate=res_rate
+        recent_grievances=recent_grievances,
+        activities=activities
     )
 
 
@@ -2261,6 +2332,170 @@ def mark_notification_read(id):
     cursor.close()
     conn.close()
     return jsonify({'success': True})
+
+# Deletes a grievance from user's UI (sets respective role_deleted = TRUE)
+@app.route('/grievance/<int:id>/delete-ui', methods=['POST', 'GET'])
+@login_required
+def delete_grievance_ui(id):
+    role = session.get('role')
+    user_id = session['user_id']
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Check if the grievance exists
+    cursor.execute("SELECT * FROM grievances WHERE id = %s", (id,))
+    grievance = cursor.fetchone()
+    
+    if not grievance:
+        flash('Grievance not found.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('dashboard'))
+        
+    # Depending on role, perform role checks and update role's deleted flag
+    if role == 'student':
+        if grievance['user_id'] != user_id:
+            flash('Access denied.', 'danger')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('dashboard'))
+        cursor.execute("UPDATE grievances SET student_deleted = TRUE WHERE id = %s", (id,))
+        
+    elif role == 'staff':
+        if grievance['staff_id'] != user_id:
+            flash('Access denied.', 'danger')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('dashboard'))
+        cursor.execute("UPDATE grievances SET staff_deleted = TRUE WHERE id = %s", (id,))
+        
+    elif role == 'warden':
+        if grievance['warden_id'] != user_id:
+            flash('Access denied.', 'danger')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('dashboard'))
+        cursor.execute("UPDATE grievances SET warden_deleted = TRUE WHERE id = %s", (id,))
+        
+    elif role == 'department':
+        cursor.execute("UPDATE grievances SET authority_deleted = TRUE WHERE id = %s", (id,))
+        
+    elif role == 'admin':
+        cursor.execute("UPDATE grievances SET admin_deleted = TRUE WHERE id = %s", (id,))
+        
+    elif role == 'principal':
+        cursor.execute("UPDATE grievances SET principal_deleted = TRUE WHERE id = %s", (id,))
+        
+    else:
+        flash('Access denied.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('dashboard'))
+        
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    flash('Grievance removed from active view.', 'success')
+    return redirect(url_for('grievance_history'))
+
+# Views hidden/deleted grievances history for logged-in role
+@app.route('/grievance-history')
+@login_required
+def grievance_history():
+    role = session.get('role')
+    user_id = session['user_id']
+    
+    status_filter = request.args.get('status', 'all').strip()
+    priority_filter = request.args.get('priority', 'all').strip()
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort', 'newest').strip()
+    dept_filter = request.args.get('department', 'all').strip()
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Base query components
+    query = """SELECT g.*, u.name as student_name, u.email as student_email, u.department as student_dept 
+               FROM grievances g 
+               JOIN users u ON g.user_id = u.id 
+               WHERE """
+               
+    params = []
+    
+    # Role-specific filters
+    if role == 'student':
+        query += "g.user_id = %s AND g.student_deleted = TRUE"
+        params.append(user_id)
+    elif role == 'staff':
+        query += "g.staff_id = %s AND g.staff_deleted = TRUE"
+        params.append(user_id)
+    elif role == 'warden':
+        query += "g.warden_id = %s AND g.warden_deleted = TRUE"
+        params.append(user_id)
+    elif role == 'department':
+        query += "g.category IN ('Department', 'Hostel') AND g.authority_deleted = TRUE"
+    elif role == 'admin':
+        query += "g.admin_deleted = TRUE"
+    elif role == 'principal':
+        query += "g.principal_deleted = TRUE"
+    else:
+        cursor.close()
+        conn.close()
+        return redirect(url_for('dashboard'))
+        
+    # Filters
+    if status_filter != 'all':
+        query += " AND g.status = %s"
+        params.append(status_filter)
+        
+    if priority_filter != 'all':
+        if priority_filter == 'normal':
+            query += " AND g.priority IN ('normal', 'medium', 'M', 'm')"
+        else:
+            query += " AND g.priority = %s"
+            params.append(priority_filter)
+            
+    if dept_filter != 'all':
+        query += " AND (g.target_department = %s OR u.department = %s)"
+        params.extend([dept_filter, dept_filter])
+        
+    if search_query:
+        query += " AND (g.title LIKE %s OR g.description LIKE %s OR (g.is_anonymous = FALSE AND (u.name LIKE %s OR u.email LIKE %s)))"
+        like_expr = f"%{search_query}%"
+        params.extend([like_expr, like_expr, like_expr, like_expr])
+        
+    # Sorting logic
+    if sort_by == 'oldest':
+        query += " ORDER BY g.created_at ASC"
+    elif sort_by == 'priority_high':
+        query += " ORDER BY CASE WHEN g.priority = 'high' THEN 1 WHEN g.priority IN ('normal', 'medium', 'M', 'm') THEN 2 WHEN g.priority = 'low' THEN 3 ELSE 4 END ASC, g.created_at DESC"
+    else: # newest
+        query += " ORDER BY g.created_at DESC"
+        
+    cursor.execute(query, tuple(params))
+    grievances = cursor.fetchall()
+    
+    # Process anonymity
+    for g in grievances:
+        if g.get('is_anonymous') and g.get('user_id') != user_id:
+            g['student_name'] = 'Anonymous'
+            g['student_email'] = 'N/A'
+            g['student_dept'] = 'N/A'
+            
+    cursor.close()
+    conn.close()
+    
+    return render_template(
+        'grievance_history.html',
+        grievances=grievances,
+        status_filter=status_filter,
+        priority_filter=priority_filter,
+        search_query=search_query,
+        sort_by=sort_by,
+        dept_filter=dept_filter
+    )
 
 # ----------------- UPLOADS ROUTE -----------------
 @app.route('/static/uploads/<filename>')

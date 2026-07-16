@@ -32,7 +32,7 @@
         </div>
     </div>
     
-    <div class="card stat-card">
+    <a href="{{ url_for('grievance_history') }}" class="card stat-card" style="text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon primary">
             <i class="fa-solid fa-receipt"></i>
         </div>
@@ -40,9 +40,9 @@
             <span class="stat-number">{{ total_grievances }}</span>
             <span class="stat-label">Total Complaints</span>
         </div>
-    </div>
+    </a>
     
-    <div class="card stat-card">
+    <a href="{{ url_for('grievance_history', status='pending') }}" class="card stat-card" style="text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon warning">
             <i class="fa-solid fa-clock-rotate-left"></i>
         </div>
@@ -50,9 +50,9 @@
             <span class="stat-number">{{ pending }}</span>
             <span class="stat-label">Pending Review</span>
         </div>
-    </div>
+    </a>
     
-    <div class="card stat-card">
+    <a href="{{ url_for('grievance_history', status='resolved') }}" class="card stat-card" style="text-decoration: none; color: inherit; cursor: pointer; transition: transform 0.2s;">
         <div class="stat-icon success">
             <i class="fa-solid fa-circle-check"></i>
         </div>
@@ -60,7 +60,7 @@
             <span class="stat-number">{{ resolved }}</span>
             <span class="stat-label">Resolved cases</span>
         </div>
-    </div>
+    </a>
 </div>
 
 <!-- Charts Grid -->
@@ -127,7 +127,12 @@
                             {% endif %}
                         </td>
                         <td style="padding: 10px 16px;">
-                            <a href="{{ url_for('grievance_details', id=g.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 11px;">Manage</a>
+                            <div style="display: flex; gap: 16px;">
+                                <a href="{{ url_for('grievance_details', id=g.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 11px;">Manage</a>
+                                <a href="{{ url_for('delete_grievance_ui', id=g.id) }}" class="btn btn-danger" style="padding: 6px 12px; font-size: 11px;" onclick="event.preventDefault(); const href = this.href; showCustomConfirm('Are you sure want to remove this Grievance?', function() { window.location.href = href; });">
+                                    <i class="fa-solid fa-trash"></i> Remove
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

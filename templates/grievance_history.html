@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Grievance History - Student Grievance Portal{% endblock %}
+
+{% block header_title %}Grievance History{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-title-group">
+        <h1 class="page-title">Complaint History</h1>
+    </div>
+</div>
+
+<!-- Search and Filter Panel -->
+<div class="filter-bar">
+    <form action="{{ url_for('grievance_history') }}" method="get">
+
+        <!-- Search bar -->
+        <div class="filter-group filter-group-search">
+            <label for="search" class="form-label">Search History</label>
+            <input type="text" name="search" id="search" class="form-control"
+                placeholder="Search by title or content..." value="{{ search_query }}">
+        </div>
+
+        <!-- Status filter -->
+        <div class="filter-group">
+            <label for="status" class="form-label">Status</label>
+            <select name="status" id="status" class="form-control" onchange="this.form.submit()">
+                <option value="all" {% if status_filter=='all' %}selected{% endif %}>All Statuses</option>
+                <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>Pending</option>
+                <option value="in-progress" {% if status_filter=='in-progress' %}selected{% endif %}>In Progress</option>
+                <option value="resolved" {% if status_filter=='resolved' %}selected{% endif %}>Resolved</option>
+            </select>
+        </div>
+
+        {% if session.get('role') != 'student' %}
+        <!-- Department filter -->
+        <div class="filter-group">
+            <label for="department" class="form-label">Department</label>
+            <select name="department" id="department" class="form-control" onchange="this.form.submit()">
+                <option value="all" {% if dept_filter == 'all' %}selected{% endif %}>All Departments</option>
+                <option value="Computer Science" {% if dept_filter == 'Computer Science' %}selected{% endif %}>Computer Science</option>
+                <option value="Electrical Engineering" {% if dept_filter == 'Electrical Engineering' %}selected{% endif %}>Electrical Engineering</option>
+                <option value="Mechanical Engineering" {% if dept_filter == 'Mechanical Engineering' %}selected{% endif %}>Mechanical Engineering</option>
+                <option value="Civil Engineering" {% if dept_filter == 'Civil Engineering' %}selected{% endif %}>Civil Engineering</option>
+                <option value="Business Administration" {% if dept_filter == 'Business Administration' %}selected{% endif %}>Business Administration</option>
+            </select>
+        </div>
+        {% endif %}
+
+        <!-- Sort filter -->
+        <div class="filter-group">
+            <label for="sort" class="form-label">Sort By</label>
+            <select name="sort" id="sort" class="form-control" onchange="this.form.submit()">
+                <option value="newest" {% if sort_by=='newest' %}selected{% endif %}>Newest First</option>
+                <option value="oldest" {% if sort_by=='oldest' %}selected{% endif %}>Oldest First</option>
+                <option value="priority_high" {% if sort_by=='priority_high' %}selected{% endif %}>Highest Priority</option>
+            </select>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display: flex; gap: 8px;">
+            <button type="submit" class="btn btn-primary" style="padding: 10px 16px;"><i class="fa-solid fa-filter"></i> Apply</button>
+            <a href="{{ url_for('grievance_history') }}" class="btn btn-secondary" style="padding: 10px 16px;">Reset</a>
+        </div>
+
+    </form>
+</div>
+
+<!-- Grievances Table / List -->
+{% if grievances %}
+<div class="table-responsive">
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Subject / Title</th>
+                {% if session.get('role') != 'student' %}
+                <th>Student</th>
+                {% endif %}
+                <th>Category</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Date Submitted</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for g in grievances %}
+            <tr>
+                <td style="font-weight: 700; color: var(--primary);">#{{ g.id }}</td>
+                <td>
+                    <div style="font-weight: 600;">{{ g.title }}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {{ g.description }}
+                    </div>
+                </td>
+                {% if session.get('role') != 'student' %}
+                <td>
+                    <div style="font-weight: 600;">{{ g.student_name }}</div>
+                    <div style="font-size: 11px; color: var(--text-hint);">{{ g.student_dept or 'N/A' }}</div>
+                </td>
+                {% endif %}
+                <td>{{ g.category }}</td>
+                <td>
+                    {% if g.priority == 'low' or g.priority == 'L' or g.priority == 'l' %}
+                    <span class="pill pill-low">low</span>
+                    {% elif g.priority == 'normal' or g.priority == 'medium' or g.priority == 'M' or g.priority == 'm' %}
+                    <span class="pill pill-normal">normal</span>
+                    {% else %}
+                    <span class="pill pill-high">high</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if g.status == 'pending' %}
+                    <span class="pill pill-pending">Pending</span>
+                    {% elif g.status == 'in-progress' or g.status == 'in_progress' %}
+                    <span class="pill pill-in-progress">In Progress</span>
+                    {% else %}
+                    <span class="pill pill-resolved">Resolved</span>
+                    {% endif %}
+                </td>
+                <td>{{ g.created_at | datetimeformat }}</td>
+                <td>
+                    <div style="display: flex; gap: 16px;">
+                        <a href="{{ url_for('grievance_details', id=g.id) }}" class="btn btn-secondary"
+                            style="padding: 6px 12px; font-size: 12px;">
+                            <i class="fa-solid fa-eye"></i> View Details
+                        </a>
+                        <a href="{{ url_for('export_pdf', id=g.id) }}" class="btn btn-text"
+                            style="padding: 6px; font-size: 14px;" title="Download PDF Report">
+                            <i class="fa-solid fa-file-pdf"></i>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align: center; padding: 60px;">
+    <i class="fa-regular fa-folder-open" style="font-size: 48px; color: var(--text-hint); margin-bottom: 16px;"></i>
+    <h3 style="font-size: 18px; margin-bottom: 8px;">No Archived Grievances</h3>
+    <p style="color: var(--text-secondary); max-width: 420px; margin: 0 auto;">No complaints have been deleted or archived from your active tracking log yet.</p>
+</div>
+{% endif %}
+{% endblock %}

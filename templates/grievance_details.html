@@ -62,8 +62,8 @@
                 </div>
                 <div class="meta-info-item">
                     <span>Priority:</span>
-                    {% if session.get('role') == 'department' %}
-                        <!-- Complaint Authority can adjust priority -->
+                    {% if session.get('role') in ['department', 'principal'] %}
+                        <!-- Complaint Authority / Principal can adjust priority -->
                         <form action="{{ url_for('update_priority', id=grievance.id) }}" method="post" style="display: flex; gap: 6px; align-items: center;">
                             <select name="priority" class="form-control" style="padding: 4px 8px; font-size: 12px; width: 90px;" onchange="this.form.submit()">
                                 <option value="low" {% if grievance.priority == 'low' %}selected{% endif %}>Low</option>
@@ -138,6 +138,24 @@
         </div>
         {% endif %}
         
+        <!-- Resolved Evidence Display Card -->
+        {% if grievance.resolved_evidence %}
+        <div class="card" style="border-left: 4px solid var(--success); display: flex; flex-direction: column; gap: 8px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: var(--success);"><i class="fa-solid fa-file-shield"></i> Resolution Evidence:</h4>
+            <div class="card" style="padding: 12px; display: flex; align-items: center; justify-content: space-between; background-color: var(--bg-app); box-shadow: none; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">
+                    <i class="fa-solid {% if grievance.resolved_evidence.endswith('.zip') %}fa-file-zipper{% else %}fa-file-image{% endif %}" style="font-size: 24px; color: var(--success);"></i>
+                    <span style="font-size: 13px; font-weight: 500;">{{ grievance.resolved_evidence }}</span>
+                </div>
+                <div>
+                    <a href="{{ url_for('uploaded_file', filename=grievance.resolved_evidence) }}" target="_blank" class="btn btn-primary" style="padding: 6px 12px; font-size: 11px; background-color: var(--success); border-color: var(--success); color: white;">
+                        <i class="fa-solid fa-download"></i> View Evidence
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
         <!-- Grievance Assignment & Special Warning panel (Complaint Authority only) -->
         {% if session.get('role') == 'department' %}
             {% if grievance.targets_staff %}
@@ -150,9 +168,9 @@
             {% endif %}
         {% endif %}
 
-        <!-- Unified Actions panel (Complaint Authority & Warden) -->
+        <!-- Unified Actions panel (Complaint Authority, Principal & Warden) -->
         {% set show_action_panel = false %}
-        {% if session.get('role') == 'department' %}
+        {% if session.get('role') in ['department', 'principal'] %}
             {% set show_action_panel = true %}
         {% elif session.get('role') == 'warden' and grievance.category == 'Hostel' %}
             {% if not grievance.targets_staff %}
@@ -164,7 +182,7 @@
         <div class="card" style="display: flex; flex-direction: column; gap: 12px; border-left: 4px solid var(--primary);">
             <h3 style="font-size: 16px;"><i class="fa-solid fa-circle-info"></i> Update Status & Remarks</h3>
             
-            <form action="{{ url_for('update_status', id=grievance.id) }}" method="post" style="display: flex; flex-direction: column; gap: 12px;">
+            <form action="{{ url_for('update_status', id=grievance.id) }}" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 12px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label for="actionStatus" class="form-label">Grievance Status:</label>
                     <select name="status" id="actionStatus" class="form-control" required style="margin-bottom: 12px;">
@@ -179,20 +197,38 @@
                     <textarea name="remarks" id="actionRemarks" class="form-control" placeholder="Provide action steps or details of resolution..." style="min-height: 80px; padding: 10px;" required>{{ grievance.remarks or '' }}</textarea>
                 </div>
                 
+                {% if session.get('role') == 'warden' %}
+                <!-- Evidence Upload Section for Warden -->
+                <div class="form-group" id="evidenceUploadGroup" style="margin-top: 12px; display: none;">
+                    <label class="form-label" style="font-weight: 600; margin-bottom: 8px; display: block;">Resolution Evidence (Optional):</label>
+                    
+                    <div style="display: flex; gap: 16px; margin-bottom: 8px;">
+                        <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="evidence_type" value="file" checked onclick="toggleEvidenceInput('file')">
+                            <span>Image / File</span>
+                        </label>
+                        <label style="font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="radio" name="evidence_type" value="folder" onclick="toggleEvidenceInput('folder')">
+                            <span>Folder</span>
+                        </label>
+                    </div>
+
+                    <!-- File Input -->
+                    <div id="fileEvidenceInput">
+                        <input type="file" name="resolved_evidence_file" id="resolvedEvidenceFile" class="form-control" accept="image/*,application/pdf,application/zip,application/x-zip-compressed" style="padding: 6px 12px;">
+                        <span class="form-help" style="font-size: 11px; color: var(--text-hint); display: block; margin-top: 4px;">Upload an image, PDF or ZIP file as evidence.</span>
+                    </div>
+
+                    <!-- Folder Input -->
+                    <div id="folderEvidenceInput" style="display: none;">
+                        <input type="file" name="resolved_evidence_folder" id="resolvedEvidenceFolder" class="form-control" webkitdirectory directory multiple disabled style="padding: 6px 12px;">
+                        <span class="form-help" style="font-size: 11px; color: var(--text-hint); display: block; margin-top: 4px;">Select a folder to upload all its contents as evidence.</span>
+                    </div>
+                </div>
+                {% endif %}
+                
                 <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
                     <i class="fa-solid fa-save"></i> Save Status & Remarks
-                </button>
-            </form>
-        </div>
-        {% endif %}
-
-        <!-- Administrative Controls (Admin only) -->
-        {% if session.get('role') == 'admin' %}
-        <div class="card" style="display: flex; flex-direction: column; gap: 12px; border-left: 4px solid var(--danger);">
-            <h3 style="font-size: 16px; color: var(--danger);">Administrative Actions</h3>
-            <form action="{{ url_for('delete_grievance', id=grievance.id) }}" method="post" onsubmit="return confirm('WARNING: Are you sure you want to permanently delete this grievance? This action cannot be undone.')">
-                <button type="submit" class="btn btn-danger" style="width: 100%;">
-                    <i class="fa-solid fa-trash-can"></i> Delete Grievance Record
                 </button>
             </form>
         </div>
@@ -252,6 +288,7 @@
         </div>
         
         <!-- Chat Input area -->
+        {% if session.get('role') != 'admin' %}
         <div class="chat-input-area">
             <form action="{{ url_for('reply_grievance', id=grievance.id) }}" method="post" class="chat-input-form">
                 <textarea name="message" placeholder="Type a reply here..." required aria-label="Reply message text area"></textarea>
@@ -260,6 +297,7 @@
                 </button>
             </form>
         </div>
+        {% endif %}
         
     </div>
     
@@ -272,6 +310,43 @@
     const chatMsgArea = document.getElementById('chatMsgArea');
     if (chatMsgArea) {
         chatMsgArea.scrollTop = chatMsgArea.scrollHeight;
+    }
+
+    // Dynamic evidence upload fields toggle
+    const actionStatus = document.getElementById('actionStatus');
+    const evidenceUploadGroup = document.getElementById('evidenceUploadGroup');
+    
+    function toggleEvidenceGroup() {
+        if (actionStatus && actionStatus.value === 'resolved') {
+            if (evidenceUploadGroup) evidenceUploadGroup.style.display = 'block';
+        } else {
+            if (evidenceUploadGroup) evidenceUploadGroup.style.display = 'none';
+        }
+    }
+    
+    if (actionStatus) {
+        actionStatus.addEventListener('change', toggleEvidenceGroup);
+        // Run on load to set correct state
+        toggleEvidenceGroup();
+    }
+    
+    function toggleEvidenceInput(type) {
+        const fileDiv = document.getElementById('fileEvidenceInput');
+        const folderDiv = document.getElementById('folderEvidenceInput');
+        const fileInput = document.getElementById('resolvedEvidenceFile');
+        const folderInput = document.getElementById('resolvedEvidenceFolder');
+        
+        if (type === 'file') {
+            if (fileDiv) fileDiv.style.display = 'block';
+            if (folderDiv) folderDiv.style.display = 'none';
+            if (fileInput) fileInput.disabled = false;
+            if (folderInput) folderInput.disabled = true;
+        } else {
+            if (fileDiv) fileDiv.style.display = 'none';
+            if (folderDiv) folderDiv.style.display = 'block';
+            if (fileInput) fileInput.disabled = true;
+            if (folderInput) folderInput.disabled = false;
+        }
     }
 </script>
 {% endblock %}

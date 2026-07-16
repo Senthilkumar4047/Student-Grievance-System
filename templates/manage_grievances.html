@@ -119,9 +119,12 @@
                 </td>
                 <td>{{ g.created_at | datetimeformat }}</td>
                 <td>
-                    <div style="display: flex; gap: 8px;">
+                    <div style="display: flex; gap: 16px;">
                         <a href="{{ url_for('grievance_details', id=g.id) }}" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
                             <i class="fa-solid fa-eye-dropper"></i> Manage
+                        </a>
+                        <a href="{{ url_for('delete_grievance_ui', id=g.id) }}" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="event.preventDefault(); const href = this.href; showCustomConfirm('Are you sure want to remove this Grievance?', function() { window.location.href = href; });">
+                            <i class="fa-solid fa-trash"></i> Remove
                         </a>
                         <a href="{{ url_for('export_pdf', id=g.id) }}" class="btn btn-text" style="padding: 6px; font-size: 14px;" title="Download PDF Summary">
                             <i class="fa-solid fa-file-pdf"></i>

@@ -93,6 +93,12 @@
                             <span>Manage Users</span>
                         </a>
                     </li>
+                    <li class="sidebar-item {% if request.path == url_for('grievance_history') %}active{% endif %}">
+                        <a href="{{ url_for('grievance_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Grievance History</span>
+                        </a>
+                    </li>
                 {% elif session.get('role') == 'principal' %}
                     <!-- Principal Navigation -->
                     <li class="sidebar-item {% if request.path == url_for('principal_dashboard') %}active{% endif %}">
@@ -107,12 +113,24 @@
                             <span>Monitor Grievances</span>
                         </a>
                     </li>
+                    <li class="sidebar-item {% if request.path == url_for('grievance_history') %}active{% endif %}">
+                        <a href="{{ url_for('grievance_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Grievance History</span>
+                        </a>
+                    </li>
                 {% elif session.get('role') == 'staff' %}
                     <!-- Staff Navigation -->
                     <li class="sidebar-item {% if request.path == url_for('staff_dashboard') %}active{% endif %}">
                         <a href="{{ url_for('staff_dashboard') }}" class="sidebar-link">
                             <i class="fa-solid fa-briefcase"></i>
                             <span>My Grievances</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item {% if request.path == url_for('grievance_history') %}active{% endif %}">
+                        <a href="{{ url_for('grievance_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Grievance History</span>
                         </a>
                     </li>
                 {% elif session.get('role') == 'warden' %}
@@ -123,12 +141,24 @@
                             <span>My Grievances</span>
                         </a>
                     </li>
+                    <li class="sidebar-item {% if request.path == url_for('grievance_history') %}active{% endif %}">
+                        <a href="{{ url_for('grievance_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Grievance History</span>
+                        </a>
+                    </li>
                 {% elif session.get('role') == 'department' %}
                     <!-- Authority Navigation -->
                     <li class="sidebar-item {% if request.path == url_for('dashboard') %}active{% endif %}">
                         <a href="{{ url_for('dashboard') }}" class="sidebar-link">
                             <i class="fa-solid fa-house"></i>
                             <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item {% if request.path == url_for('grievance_history') %}active{% endif %}">
+                        <a href="{{ url_for('grievance_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Grievance History</span>
                         </a>
                     </li>
                 {% else %}
@@ -149,6 +179,12 @@
                         <a href="{{ url_for('my_grievances') }}" class="sidebar-link">
                             <i class="fa-solid fa-receipt"></i>
                             <span>My Grievances</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item {% if request.path == url_for('grievance_history') %}active{% endif %}">
+                        <a href="{{ url_for('grievance_history') }}" class="sidebar-link">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Grievance History</span>
                         </a>
                     </li>
                 {% endif %}
@@ -240,5 +276,44 @@
     <!-- Custom Script Utilities -->
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     {% block scripts %}{% endblock %}
+
+    <!-- Beautiful Custom Confirmation Modal -->
+    <div id="customConfirmModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 9999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div style="width: 100%; max-width: 400px; padding: 24px; display: flex; flex-direction: column; gap: 16px; border-left: 4px solid var(--danger); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); border-radius: 8px; background: #1a1212; border: 1px solid rgba(255,255,255,0.05);">
+            <h3 style="font-size: 16px; font-weight: 700; color: #fff; margin: 0; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-triangle-exclamation" style="color: var(--danger);"></i> Confirmation
+            </h3>
+            <p id="customConfirmMessage" style="font-size: 14px; color: #ccc; line-height: 1.5; margin: 0;">Are you sure want to remove this Grievance?</p>
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+                <button type="button" class="btn btn-secondary" id="customConfirmCancelBtn" style="padding: 8px 16px; font-size: 13px;">Cancel</button>
+                <button type="button" class="btn btn-primary" id="customConfirmOkBtn" style="background-color: var(--danger); border-color: var(--danger); color: white; padding: 8px 16px; font-size: 13px;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let confirmCallback = null;
+        
+        function showCustomConfirm(message, callback) {
+            document.getElementById('customConfirmMessage').textContent = message;
+            const modal = document.getElementById('customConfirmModal');
+            modal.style.display = 'flex';
+            confirmCallback = callback;
+        }
+        
+        function hideCustomConfirm() {
+            const modal = document.getElementById('customConfirmModal');
+            modal.style.display = 'none';
+            confirmCallback = null;
+        }
+        
+        document.getElementById('customConfirmCancelBtn').addEventListener('click', hideCustomConfirm);
+        document.getElementById('customConfirmOkBtn').addEventListener('click', function() {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            hideCustomConfirm();
+        });
+    </script>
 </body>
 </html>
